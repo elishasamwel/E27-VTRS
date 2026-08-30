@@ -1,0 +1,193 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isBootstrappedAdmin() {
+      return isSignedIn() &&
+        (request.auth.token.email == 'elishasamwel27@gmail.com' ||
+         request.auth.token.email == 'admin@galco.co.tz');
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        (isBootstrappedAdmin() ||
+         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN' &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'ACTIVE'));
+    }
+
+    function isPortUser() {
+      return isSignedIn() &&
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'PORT_RELEASE' &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'ACTIVE');
+    }
+
+    function isGalcoUser() {
+      return isSignedIn() &&
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'GALCO_RECEIVING' &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'ACTIVE');
+    }
+
+    function isAuthorizedUser() {
+      return true;
+    }
+
+    // Entity Validation Helpers
+    function isValidUser(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.email is string && data.email.size() > 0 && data.email.size() <= 150 &&
+             data.username is string && data.username.size() > 0 && data.username.size() <= 50 &&
+             data.role in ['ADMIN', 'PORT_RELEASE', 'GALCO_RECEIVING'] &&
+             data.status in ['ACTIVE', 'INACTIVE'] &&
+             data.createdAt is string && data.createdAt.size() <= 50;
+    }
+
+    function isValidVehicle(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.chassisNumber is string && data.chassisNumber.size() > 0 && data.chassisNumber.size() <= 50 &&
+             data.description is string && data.description.size() > 0 && data.description.size() <= 200 &&
+             data.status in ['AT PORT', 'ON TRANSIT', 'RECEIVED AT GALCO'] &&
+             data.createdAt is string && data.createdAt.size() <= 50 &&
+             data.updatedAt is string && data.updatedAt.size() <= 50;
+    }
+
+    function isValidVehicleHistory(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.vehicleId is string && data.vehicleId.size() <= 128 &&
+             data.action is string && data.action.size() > 0 && data.action.size() <= 100 &&
+             data.previousStatus is string && data.previousStatus.size() <= 50 &&
+             data.newStatus is string && data.newStatus.size() <= 50 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.userName is string && data.userName.size() <= 100 &&
+             data.userRole is string && data.userRole.size() <= 50 &&
+             data.timestamp is string && data.timestamp.size() <= 50;
+    }
+
+    function isValidManifest(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.fileName is string && data.fileName.size() > 0 && data.fileName.size() <= 200 &&
+             data.uploadedByUserId is string && data.uploadedByUserId.size() <= 128 &&
+             data.uploadedByName is string && data.uploadedByName.size() <= 100 &&
+             data.uploadedAt is string && data.uploadedAt.size() <= 50 &&
+             data.totalRecords is number && data.successfulRecords is number;
+    }
+
+    function isValidAuditLog(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.action is string && data.action.size() > 0 && data.action.size() <= 100 &&
+             data.details is string && data.details.size() <= 500 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.userName is string && data.userName.size() <= 100 &&
+             data.userRole is string && data.userRole.size() <= 50 &&
+             data.timestamp is string && data.timestamp.size() <= 50;
+    }
+
+    function isValidMarineVessel(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.status in ['ACTIVE', 'COMPLETED', 'ARCHIVED'] &&
+             data.isVisibleInOperations is bool &&
+             data.createdAt is string && data.createdAt.size() <= 50;
+    }
+
+    // USERS COLLECTION
+    match /users/{userId} {
+      allow get: if isAuthorizedUser();
+      allow list: if isAuthorizedUser();
+      allow create: if isAuthorizedUser() && isValidId(userId) && isValidUser(incoming());
+      allow update: if isAuthorizedUser() && isValidId(userId) && isValidUser(incoming());
+      allow delete: if isAuthorizedUser() && isValidId(userId);
+    }
+
+    // ADMINS COLLECTION
+    match /admins/{adminId} {
+      allow read: if isAuthorizedUser();
+      allow write: if isAuthorizedUser() && isValidId(adminId);
+    }
+
+    // VEHICLES COLLECTION
+    match /vehicles/{vehicleId} {
+      allow get: if isAuthorizedUser();
+      allow list: if isAuthorizedUser();
+      allow create: if isAuthorizedUser() && isValidId(vehicleId) && isValidVehicle(incoming());
+      allow update: if isAuthorizedUser() && isValidId(vehicleId) && isValidVehicle(incoming());
+      allow delete: if isAuthorizedUser() && isValidId(vehicleId);
+
+      // VEHICLE HISTORY SUBCOLLECTION
+      match /history/{historyId} {
+        allow get: if isAuthorizedUser();
+        allow list: if isAuthorizedUser();
+        allow create: if isAuthorizedUser() && isValidId(historyId) && isValidVehicleHistory(incoming());
+        allow update: if false; // History records are immutable
+        allow delete: if isAuthorizedUser();
+      }
+    }
+
+    // VEHICLE HISTORY TOP-LEVEL COLLECTION (FOR FLAT QUERIES)
+    match /vehicle_history/{historyId} {
+      allow get: if isAuthorizedUser();
+      allow list: if isAuthorizedUser();
+      allow create: if isAuthorizedUser() && isValidId(historyId) && isValidVehicleHistory(incoming());
+      allow update: if false;
+      allow delete: if isAuthorizedUser();
+    }
+
+    // MANIFESTS COLLECTION
+    match /manifests/{manifestId} {
+      allow get: if isAuthorizedUser();
+      allow list: if isAuthorizedUser();
+      allow create: if isAuthorizedUser() && isValidId(manifestId) && isValidManifest(incoming());
+      allow update: if isAuthorizedUser() && isValidId(manifestId) && isValidManifest(incoming());
+      allow delete: if isAuthorizedUser();
+    }
+
+    // AUDIT LOGS COLLECTION
+    match /audit_logs/{logId} {
+      allow get: if isAuthorizedUser();
+      allow list: if isAuthorizedUser();
+      allow create: if isAuthorizedUser() && isValidId(logId) && isValidAuditLog(incoming());
+      allow update: if false; // Audit logs are immutable
+      allow delete: if isAuthorizedUser();
+    }
+
+    // MARINE VESSELS COLLECTION
+    match /marine_vessels/{vesselId} {
+      allow get: if isAuthorizedUser();
+      allow list: if isAuthorizedUser();
+      allow create: if isAuthorizedUser() && isValidId(vesselId) && isValidMarineVessel(incoming());
+      allow update: if isAuthorizedUser() && isValidId(vesselId) && isValidMarineVessel(incoming());
+      allow delete: if isAuthorizedUser();
+    }
+
+    // TEST CONNECTION COLLECTION
+    match /test/{docId} {
+      allow read, write: if true;
+    }
+  }
+}

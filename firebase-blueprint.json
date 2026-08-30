@@ -1,0 +1,138 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role-based access permissions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 150 },
+        "username": { "type": "string", "maxLength": 50 },
+        "role": { "type": "string", "enum": ["ADMIN", "PORT_RELEASE", "GALCO_RECEIVING"] },
+        "status": { "type": "string", "enum": ["ACTIVE", "INACTIVE"] },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "lastLogin": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "name", "email", "username", "role", "status", "createdAt"]
+    },
+    "Vehicle": {
+      "title": "Vehicle",
+      "description": "Vehicle asset tracked through transfer lifecycle",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "serialNumber": { "type": "string", "maxLength": 50 },
+        "chassisNumber": { "type": "string", "maxLength": 50 },
+        "description": { "type": "string", "maxLength": 200 },
+        "status": { "type": "string", "enum": ["AT PORT", "ON TRANSIT", "RECEIVED AT GALCO"] },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "updatedAt": { "type": "string", "maxLength": 50 },
+        "manifestId": { "type": "string", "maxLength": 128 },
+        "releasedByUserId": { "type": "string", "maxLength": 128 },
+        "releasedByName": { "type": "string", "maxLength": 100 },
+        "releasedAt": { "type": "string", "maxLength": 50 },
+        "receivedByUserId": { "type": "string", "maxLength": 128 },
+        "receivedByName": { "type": "string", "maxLength": 100 },
+        "receivedAt": { "type": "string", "maxLength": 50 },
+        "notes": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["id", "serialNumber", "chassisNumber", "description", "status", "createdAt", "updatedAt"]
+    },
+    "VehicleHistory": {
+      "title": "VehicleHistory",
+      "description": "Timestamped timeline log for vehicle lifecycle",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "vehicleId": { "type": "string", "maxLength": 128 },
+        "action": { "type": "string", "maxLength": 100 },
+        "previousStatus": { "type": "string", "maxLength": 50 },
+        "newStatus": { "type": "string", "maxLength": 50 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "userName": { "type": "string", "maxLength": 100 },
+        "userRole": { "type": "string", "maxLength": 50 },
+        "timestamp": { "type": "string", "maxLength": 50 },
+        "notes": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["id", "vehicleId", "action", "previousStatus", "newStatus", "userId", "userName", "userRole", "timestamp"]
+    },
+    "Manifest": {
+      "title": "Manifest",
+      "description": "Imported manifest batch header and stats",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "fileName": { "type": "string", "maxLength": 200 },
+        "uploadedByUserId": { "type": "string", "maxLength": 128 },
+        "uploadedByName": { "type": "string", "maxLength": 100 },
+        "uploadedAt": { "type": "string", "maxLength": 50 },
+        "totalRecords": { "type": "number" },
+        "successfulRecords": { "type": "number" },
+        "duplicateRecords": { "type": "number" },
+        "invalidRecords": { "type": "number" }
+      },
+      "required": ["id", "fileName", "uploadedByUserId", "uploadedByName", "uploadedAt", "totalRecords", "successfulRecords"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable security and operational event log",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "action": { "type": "string", "maxLength": 100 },
+        "details": { "type": "string", "maxLength": 500 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "userName": { "type": "string", "maxLength": 100 },
+        "userRole": { "type": "string", "maxLength": 50 },
+        "vehicleId": { "type": "string", "maxLength": 128 },
+        "chassisNumber": { "type": "string", "maxLength": 50 },
+        "timestamp": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "action", "details", "userId", "userName", "userRole", "timestamp"]
+    },
+    "MarineVessel": {
+      "title": "MarineVessel",
+      "description": "Marine vessel registry with operational visibility status",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "voyageNumber": { "type": "string", "maxLength": 50 },
+        "portOfDischarge": { "type": "string", "maxLength": 100 },
+        "status": { "type": "string", "enum": ["ACTIVE", "COMPLETED", "ARCHIVED"] },
+        "isVisibleInOperations": { "type": "boolean" },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "completedAt": { "type": "string", "maxLength": 50 },
+        "notes": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["id", "name", "status", "isVisibleInOperations", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User accounts and RBAC access definitions"
+    },
+    "/vehicles/{vehicleId}": {
+      "schema": "Vehicle",
+      "description": "Tracked vehicles moving through the transfer pipeline"
+    },
+    "/vehicles/{vehicleId}/history/{historyId}": {
+      "schema": "VehicleHistory",
+      "description": "Chronological state change log for a vehicle"
+    },
+    "/manifests/{manifestId}": {
+      "schema": "Manifest",
+      "description": "Uploaded manifest files and batch records"
+    },
+    "/audit_logs/{logId}": {
+      "schema": "AuditLog",
+      "description": "System activity and operational audit trail"
+    },
+    "/marine_vessels/{vesselId}": {
+      "schema": "MarineVessel",
+      "description": "Registered marine vessels and transfer lifecycle records"
+    }
+  }
+}
