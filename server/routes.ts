@@ -19,15 +19,36 @@ function getActor(req: Request): User {
 apiRouter.post('/auth/login', (req: Request, res: Response) => {
   const { identifier, password } = req.body;
   if (!identifier || !password) {
-    return res.status(400).json({ error: 'Username/email and password are required.' });
+    return res.status(400).json({ error: 'Username and password are required.' });
   }
 
-  const user = db.authenticate(identifier, password);
-  if (!user) {
-    return res.status(401).json({ error: 'Invalid credentials or inactive account.' });
+  const result = db.authenticateResult(identifier, password);
+  if (!result.success || !result.user) {
+    return res.status(401).json({
+      error: result.error || 'Invalid credentials or inactive account.',
+      isPending: result.isPending || false,
+    });
   }
 
-  res.json({ user, token: `token-${user.id}-${Date.now()}` });
+  res.json({ user: result.user, token: `token-${result.user.id}-${Date.now()}` });
+});
+
+apiRouter.post('/auth/register', (req: Request, res: Response) => {
+  const { name, username, email, password, role } = req.body;
+  if (!name || !username || !password) {
+    return res.status(400).json({ error: 'Full name, username, and password are required.' });
+  }
+
+  const regResult = db.registerUser({ name, username, email, password, role });
+  if (!regResult.success || !regResult.user) {
+    return res.status(400).json({ error: regResult.error || 'Failed to register account.' });
+  }
+
+  res.json({
+    success: true,
+    user: regResult.user,
+    message: 'Registration submitted successfully! Your account is pending Administrator approval.',
+  });
 });
 
 apiRouter.get('/auth/me', (req: Request, res: Response) => {
@@ -83,6 +104,23 @@ apiRouter.post('/vehicles/:id/release', (req: Request, res: Response) => {
 
   const { notes } = req.body;
   const result = db.releaseFromPort(req.params.id, actor, notes);
+  if (!result.success) {
+    return res.status(400).json({ error: result.error });
+  }
+
+  res.json({ success: true, vehicle: result.vehicle });
+});
+
+// WORKFLOW STEP 2B: Undo release from port (ON TRANSIT -> AT PORT) - ADMIN ONLY
+apiRouter.post('/vehicles/:id/undo-release', (req: Request, res: Response) => {
+  const actor = getActor(req);
+  // Authorization check: STRICTLY Admin only
+  if (actor.role !== 'ADMIN') {
+    return res.status(403).json({ error: 'Unauthorized. Only Administrators can undo port release.' });
+  }
+
+  const { notes, reason } = req.body;
+  const result = db.undoPortRelease(req.params.id, actor, notes || reason);
   if (!result.success) {
     return res.status(400).json({ error: result.error });
   }
@@ -314,6 +352,34 @@ apiRouter.put('/users/:id', (req: Request, res: Response) => {
   }
 
   res.json({ success: true, user: updated });
+});
+
+apiRouter.post('/users/:id/approve', (req: Request, res: Response) => {
+  const actor = getActor(req);
+  if (actor.role !== 'ADMIN') {
+    return res.status(403).json({ error: 'Only Admins can approve user accounts.' });
+  }
+
+  const result = db.approveUser(req.params.id, actor);
+  if (!result.success || !result.user) {
+    return res.status(404).json({ error: result.error || 'Failed to approve user.' });
+  }
+
+  res.json({ success: true, user: result.user, message: 'User approved and activated successfully.' });
+});
+
+apiRouter.delete('/users/:id', (req: Request, res: Response) => {
+  const actor = getActor(req);
+  if (actor.role !== 'ADMIN') {
+    return res.status(403).json({ error: 'Only Admins can delete users.' });
+  }
+
+  const result = db.deleteUser(req.params.id, actor);
+  if (!result.success) {
+    return res.status(400).json({ error: result.error || 'Failed to delete user.' });
+  }
+
+  res.json({ success: true, message: 'User removed successfully.' });
 });
 
 // 5. Audit Logs

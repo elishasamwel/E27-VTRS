@@ -26,7 +26,7 @@ export interface User {
   email: string;
   username: string;
   role: UserRole;
-  status: 'ACTIVE' | 'INACTIVE';
+  status: 'ACTIVE' | 'INACTIVE' | 'PENDING_APPROVAL';
   isActive?: boolean;
   createdAt: string;
   lastLogin?: string;

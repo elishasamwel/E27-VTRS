@@ -115,8 +115,8 @@ export const VehicleTimeline: React.FC<VehicleTimelineProps> = ({ vehicle, histo
             System Movement Audit Log Entries ({history.length})
           </h4>
           <div className="space-y-2 max-h-48 overflow-y-auto pr-1 text-xs">
-            {history.map((h) => (
-              <div key={h.id} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 flex items-start justify-between gap-3">
+            {history.map((h, idx) => (
+              <div key={`hist-entry-${h.id || ''}-${idx}`} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 flex items-start justify-between gap-3">
                 <div>
                   <span className="font-semibold text-slate-900">{h.action}</span>
                   {h.notes && <p className="text-slate-600 text-[11px] mt-0.5">{h.notes}</p>}

@@ -20,12 +20,12 @@ export class FirestoreService {
       // Clean undefined fields for Firestore
       const payload: any = {
         id: vehicle.id,
-        serialNumber: String(vehicle.serialNumber),
-        chassisNumber: vehicle.chassisNumber.trim().toUpperCase(),
-        description: vehicle.description.trim(),
-        status: vehicle.status,
-        createdAt: vehicle.createdAt,
-        updatedAt: vehicle.updatedAt,
+        serialNumber: String(vehicle.serialNumber || ''),
+        chassisNumber: (vehicle.chassisNumber || '').trim().toUpperCase(),
+        description: (vehicle.description || 'N/A').trim(),
+        status: vehicle.status || 'AT PORT',
+        createdAt: vehicle.createdAt || new Date().toISOString(),
+        updatedAt: vehicle.updatedAt || new Date().toISOString(),
       };
       if (vehicle.manifestId) payload.manifestId = vehicle.manifestId;
       if (vehicle.releasedByUserId) payload.releasedByUserId = vehicle.releasedByUserId;
@@ -278,6 +278,15 @@ export class FirestoreService {
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, path);
+    }
+  }
+
+  static async removeUser(userId: string): Promise<void> {
+    const path = `users/${userId}`;
+    try {
+      await deleteDoc(doc(db, 'users', userId));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, path);
     }
   }
 

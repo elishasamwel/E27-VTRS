@@ -35,9 +35,6 @@ export const ManifestUploadModal: React.FC<ManifestUploadModalProps> = ({
   const [file, setFile] = useState<File | null>(null);
   const [fileName, setFileName] = useState<string>('');
   const [vesselName, setVesselName] = useState<string>('');
-  const [voyageNumber, setVoyageNumber] = useState<string>('');
-  const [portOfDischarge, setPortOfDischarge] = useState<string>('Dar es Salaam Port (TPA)');
-  const [isVisibleInOperations, setIsVisibleInOperations] = useState<boolean>(true);
   const [existingVessels, setExistingVessels] = useState<string[]>([]);
 
   const [isProcessing, setIsProcessing] = useState(false);
@@ -49,7 +46,7 @@ export const ManifestUploadModal: React.FC<ManifestUploadModalProps> = ({
     if (isOpen) {
       ApiService.getVessels(false, user)
         .then((list) => {
-          const names = list.map((v) => v.name).filter(Boolean);
+          const names = Array.from(new Set(list.map((v) => v.name?.trim()).filter(Boolean)));
           setExistingVessels(names);
           if (names.length > 0 && !vesselName) {
             setVesselName(names[0]);
@@ -76,6 +73,12 @@ export const ManifestUploadModal: React.FC<ManifestUploadModalProps> = ({
 
   // Helper to parse file
   const processUploadedFile = async (selectedFile: File) => {
+    const cleanVesselName = vesselName.trim().toUpperCase();
+    if (!cleanVesselName) {
+      showError('Please write the Marine Vessel Name before uploading the manifest.');
+      return;
+    }
+
     setFile(selectedFile);
     setFileName(selectedFile.name);
     setIsProcessing(true);
@@ -95,50 +98,88 @@ export const ManifestUploadModal: React.FC<ManifestUploadModalProps> = ({
       // Find header row indices
       const headerRow = rawJson[0].map((h: any) => String(h || '').trim().toLowerCase());
 
-      let serialIdx = headerRow.findIndex(
-        (h: string) => h.includes('serial') || h.includes('s/n') || h.includes('sn') || h === 'no' || h === '#'
+      const serialIdx = headerRow.findIndex(
+        (h: string) =>
+          h.includes('serial') ||
+          h.includes('s/n') ||
+          h.includes('sn') ||
+          h.includes('sr') ||
+          h.includes('item') ||
+          h === 'no' ||
+          h === '#' ||
+          h === 'no.' ||
+          h === 's.no' ||
+          h === 'sr.no'
       );
-      let chassisIdx = headerRow.findIndex(
-        (h: string) => h.includes('chassis') || h.includes('vin') || h.includes('frame')
+      const chassisIdx = headerRow.findIndex(
+        (h: string) =>
+          h.includes('chassis') ||
+          h.includes('chasis') ||
+          h.includes('vin') ||
+          h.includes('frame') ||
+          h.includes('chassis no') ||
+          h.includes('chassis number')
       );
-      let descIdx = headerRow.findIndex(
-        (h: string) => h.includes('desc') || h.includes('make') || h.includes('model') || h.includes('vehicle')
+      const descIdx = headerRow.findIndex(
+        (h: string) =>
+          h.includes('desc') ||
+          h.includes('make') ||
+          h.includes('model') ||
+          h.includes('vehicle') ||
+          h.includes('type') ||
+          h.includes('car')
       );
-      let vesselIdx = headerRow.findIndex(
+      const vesselIdx = headerRow.findIndex(
         (h: string) => h.includes('vessel') || h.includes('ship') || h.includes('marine')
       );
-      let voyageIdx = headerRow.findIndex(
+      const voyageIdx = headerRow.findIndex(
         (h: string) => h.includes('voyage') || h.includes('voy')
       );
 
-      // Default fallback by position if not named
-      if (serialIdx === -1) serialIdx = 0;
-      if (chassisIdx === -1) chassisIdx = 1;
-      if (descIdx === -1) descIdx = 2;
+      // Verify mandatory columns in header
+      if (serialIdx === -1 && chassisIdx === -1) {
+        throw new Error(
+          "Missing mandatory columns: Excel file must include 'Serial Number' (S/N, No) and 'Chassis Number' (VIN, Frame) columns."
+        );
+      }
+      if (serialIdx === -1) {
+        throw new Error(
+          "Missing mandatory column: 'Serial Number' (or S/N, No) column was not found in the Excel file headers."
+        );
+      }
+      if (chassisIdx === -1) {
+        throw new Error(
+          "Missing mandatory column: 'Chassis Number' (or VIN, Frame No) column was not found in the Excel file headers."
+        );
+      }
 
       // Extract rows
-      const effectiveVessel = vesselName.trim().toUpperCase() || 'MV GENERAL CARRIER';
-      const effectiveVoyage = voyageNumber.trim().toUpperCase() || 'VOY-2026/01';
+      const effectiveVessel = cleanVesselName;
+      const effectiveVoyage = 'VOY-GENERAL';
 
       const rowsToValidate: any[] = [];
       for (let i = 1; i < rawJson.length; i++) {
         const row = rawJson[i];
         if (!row || row.length === 0) continue;
 
-        const serialVal = row[serialIdx] !== undefined ? row[serialIdx] : i;
-        const chassisVal = row[chassisIdx] !== undefined ? String(row[chassisIdx]).trim() : '';
-        const descVal = row[descIdx] !== undefined ? String(row[descIdx]).trim() : '';
+        const rawSerial = row[serialIdx] !== undefined && row[serialIdx] !== null ? String(row[serialIdx]).trim() : '';
+        const serialVal = rawSerial !== '' ? rawSerial : `${i}`;
+        const chassisVal = row[chassisIdx] !== undefined && row[chassisIdx] !== null ? String(row[chassisIdx]).trim().toUpperCase() : '';
+        // Description is optional: if not present in header or cell is empty, default to 'N/A'
+        const descVal = descIdx !== -1 && row[descIdx] !== undefined && row[descIdx] !== null && String(row[descIdx]).trim() !== ''
+          ? String(row[descIdx]).trim()
+          : 'N/A';
         const rowVessel = vesselIdx !== -1 && row[vesselIdx] ? String(row[vesselIdx]).trim().toUpperCase() : effectiveVessel;
         const rowVoyage = voyageIdx !== -1 && row[voyageIdx] ? String(row[voyageIdx]).trim().toUpperCase() : effectiveVoyage;
 
-        if (!chassisVal && !descVal) continue; // skip empty trailing rows
+        if (!chassisVal && !rawSerial) continue; // skip completely empty trailing rows
 
         rowsToValidate.push({
           serialNumber: serialVal,
           chassisNumber: chassisVal,
           description: descVal,
-          vesselName: rowVessel,
-          voyageNumber: rowVoyage,
+          vesselName: rowVessel || effectiveVessel,
+          voyageNumber: rowVoyage || effectiveVoyage,
         });
       }
 
@@ -197,6 +238,12 @@ export const ManifestUploadModal: React.FC<ManifestUploadModalProps> = ({
   // Import Action
   const handleConfirmImport = async () => {
     if (!validationResult || validationResult.validCount === 0) return;
+    const finalVessel = vesselName.trim().toUpperCase();
+    if (!finalVessel) {
+      showError('Please enter a Marine Vessel Name before importing.');
+      return;
+    }
+
     setIsImporting(true);
 
     try {
@@ -206,21 +253,18 @@ export const ManifestUploadModal: React.FC<ManifestUploadModalProps> = ({
           serialNumber: r.serialNumber,
           chassisNumber: r.chassisNumber,
           description: r.description,
-          vesselName: r.vesselName || vesselName.trim().toUpperCase(),
-          voyageNumber: r.voyageNumber || voyageNumber.trim().toUpperCase(),
+          vesselName: r.vesselName || finalVessel,
+          voyageNumber: r.voyageNumber || 'VOY-GENERAL',
         }));
-
-      const finalVessel = vesselName.trim().toUpperCase() || 'UNASSIGNED VESSEL';
-      const finalVoyage = voyageNumber.trim().toUpperCase() || 'VOY-GENERAL';
 
       await ApiService.importManifest(
         validationResult.fileName,
         validRows,
         {
           vesselName: finalVessel,
-          voyageNumber: finalVoyage,
-          portOfDischarge,
-          isVisibleInOperations,
+          voyageNumber: 'VOY-GENERAL',
+          portOfDischarge: 'Dar es Salaam Port (TPA)',
+          isVisibleInOperations: true,
         },
         user
       );
@@ -243,9 +287,9 @@ export const ManifestUploadModal: React.FC<ManifestUploadModalProps> = ({
       { 'Serial Number': 1, 'Chassis Number': 'KEEFW108999', Description: 'MAZDA CX-5 2.0L' },
       { 'Serial Number': 2, 'Chassis Number': 'JH4TB2H26CC000123', Description: 'HONDA CR-V 4WD' },
       { 'Serial Number': 3, 'Chassis Number': 'KMHFG4JG5GA123456', Description: 'HYUNDAI TUCSON' },
-      { 'Serial Number': 4, 'Chassis Number': 'ZVW30-1849201', Description: 'TOYOTA PRIUS HYBRID' },
+      { 'Serial Number': 4, 'Chassis Number': 'ZVW30-1849201', Description: '' }, // Description optional
       { 'Serial Number': 5, 'Chassis Number': 'WBAYU71020EE99881', Description: 'BMW X3 XDRIVE' },
-      { 'Serial Number': 6, 'Chassis Number': 'NZE161-5509123', Description: 'TOYOTA COROLLA AXIO' },
+      { 'Serial Number': 6, 'Chassis Number': 'NZE161-5509123', Description: '' }, // Description optional
     ];
 
     const ws = XLSX.utils.json_to_sheet(sampleData);
@@ -259,9 +303,9 @@ export const ManifestUploadModal: React.FC<ManifestUploadModalProps> = ({
       'Serial Number,Chassis Number,Description\n' +
       '1,KEEFW108999,MAZDA CX-5 2.0L\n' +
       '2,JH4TB2H26CC000123,HONDA CR-V 4WD\n' +
-      '3,KMHFG4JG5GA123456,HYUNDAI TUCSON\n' +
+      '3,KMHFG4JG5GA123456,\n' +
       '4,ZVW30-1849201,TOYOTA PRIUS HYBRID\n' +
-      '5,WBAYU71020EE99881,BMW X3 XDRIVE\n';
+      '5,WBAYU71020EE99881,\n';
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -304,86 +348,38 @@ export const ManifestUploadModal: React.FC<ManifestUploadModalProps> = ({
 
           {/* Modal Content */}
           <div className="p-6 overflow-y-auto flex-1 space-y-5">
-            {/* Marine Vessel Assignment Form before upload */}
-            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
-                <Ship className="w-4 h-4 text-blue-600" />
-                <span>Marine Vessel & Intake Details</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="sm:col-span-1">
-                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">
-                    Marine Vessel Name <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    list="existing-vessels-list"
-                    placeholder="e.g. MV TRANS CARRIER"
-                    value={vesselName}
-                    onChange={(e) => setVesselName(e.target.value.toUpperCase())}
-                    className="w-full px-3 py-2 text-xs font-bold bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500 uppercase tracking-wide"
-                  />
-                  <datalist id="existing-vessels-list">
-                    {existingVessels.map((v) => (
-                      <option key={v} value={v} />
-                    ))}
-                  </datalist>
-                </div>
-
-                <div>
-                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">
-                    Voyage Number
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. VOY-2026/08"
-                    value={voyageNumber}
-                    onChange={(e) => setVoyageNumber(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">
-                    Port of Discharge
-                  </label>
-                  <input
-                    type="text"
-                    value={portOfDischarge}
-                    onChange={(e) => setPortOfDischarge(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              {/* Operational Visibility Control */}
-              <div className="pt-2.5 border-t border-slate-200 flex items-center justify-between gap-4">
-                <div>
-                  <label htmlFor="modal-vessel-visibility" className="text-xs font-bold text-slate-800 flex items-center gap-1.5 cursor-pointer">
-                    <span>Operational Marine Vessel Visibility</span>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                      isVisibleInOperations ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'
-                    }`}>
-                      {isVisibleInOperations ? 'Visible in Daily Operations' : 'Hidden from Daily Operations'}
-                    </span>
-                  </label>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    {isVisibleInOperations
-                      ? 'This vessel and its imported vehicles will appear immediately on Port Release and Yard Receiving screens.'
-                      : 'This vessel will be stored in database but hidden from operational officers until you enable it.'}
-                  </p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                  <input
-                    id="modal-vessel-visibility"
-                    type="checkbox"
-                    checked={isVisibleInOperations}
-                    onChange={(e) => setIsVisibleInOperations(e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-slate-300 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+            {/* Marine Vessel Name Requirement Form */}
+            <div className="p-4 bg-blue-50/60 border border-blue-200 rounded-xl space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                  <Ship className="w-4 h-4 text-blue-600" />
+                  <span>Marine Vessel Name</span>
+                  <span className="text-rose-600 font-bold">* (Required)</span>
                 </label>
+                {vesselName && (
+                  <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                    Auto-Registered & Active
+                  </span>
+                )}
+              </div>
+              <div>
+                <input
+                  type="text"
+                  required
+                  list="existing-vessels-list"
+                  placeholder="Enter vessel name, e.g. MV HOEGH TRAPPER, MV GRANDE NIGERIA"
+                  value={vesselName}
+                  onChange={(e) => setVesselName(e.target.value.toUpperCase())}
+                  className="w-full px-3.5 py-2.5 text-sm font-bold bg-white border-2 border-blue-300 rounded-xl focus:outline-none focus:border-blue-600 focus:ring-3 focus:ring-blue-100 uppercase tracking-wide shadow-2xs"
+                />
+                <datalist id="existing-vessels-list">
+                  {existingVessels.map((v, idx) => (
+                    <option key={`opt-vsl-${v}-${idx}`} value={v} />
+                  ))}
+                </datalist>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Vehicles from this vessel will instantly be registered at port and immediately increase your operational counts.
+                </p>
               </div>
             </div>
 
@@ -419,11 +415,17 @@ export const ManifestUploadModal: React.FC<ManifestUploadModalProps> = ({
                     Supports Microsoft Excel (<strong>.xlsx</strong>, <strong>.xls</strong>) and Comma-Separated Values (<strong>.csv</strong>)
                   </p>
 
-                  <div className="inline-flex flex-wrap items-center justify-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-600 shadow-xs font-medium">
-                    <span>Columns Recognized:</span>
-                    <strong className="text-slate-900">Serial Number</strong> |
-                    <strong className="text-slate-900">Chassis Number</strong> |
-                    <strong className="text-slate-900">Description</strong>
+                  <div className="inline-flex flex-wrap items-center justify-center gap-2 px-3.5 py-1.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-600 shadow-xs font-medium">
+                    <span>Columns:</span>
+                    <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-800 font-bold border border-blue-200">
+                      Serial Number * (Compulsory)
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-800 font-bold border border-blue-200">
+                      Chassis Number * (Compulsory)
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-medium border border-slate-200">
+                      Description (Optional)
+                    </span>
                   </div>
                 </div>
 
@@ -532,7 +534,7 @@ export const ManifestUploadModal: React.FC<ManifestUploadModalProps> = ({
                       <tbody className="divide-y divide-slate-100">
                         {validationResult.rows.map((row, idx) => (
                           <tr
-                            key={idx}
+                            key={`val-row-${row.serialNumber || idx}-${row.chassisNumber || ''}-${idx}`}
                             className={
                               row.isValid
                                 ? 'bg-white hover:bg-slate-50'

@@ -365,9 +365,9 @@ export const AdminVesselsManifestsView: React.FC<AdminVesselsManifestsViewProps>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredVessels.map((vessel) => (
+              {filteredVessels.map((vessel, idx) => (
                 <div
-                  key={vessel.id}
+                  key={`vsl-entry-${vessel.id || ''}-${vessel.name || ''}-${idx}`}
                   className={`bg-white rounded-2xl p-5 border transition-all shadow-xs ${
                     vessel.isVisibleInOperations
                       ? 'border-blue-200 hover:border-blue-300'
@@ -548,8 +548,8 @@ export const AdminVesselsManifestsView: React.FC<AdminVesselsManifestsViewProps>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {manifests.map((m) => (
-                      <tr key={m.id} className="hover:bg-slate-50 transition-colors">
+                    {manifests.map((m, idx) => (
+                      <tr key={`mnf-row-${m.id || ''}-${m.fileName || ''}-${idx}`} className="hover:bg-slate-50 transition-colors">
                         <td className="py-3 px-4 font-semibold text-slate-900 flex items-center gap-2">
                           <FileSpreadsheet className="w-4 h-4 text-blue-600 shrink-0" />
                           <span className="truncate max-w-xs">{m.fileName}</span>

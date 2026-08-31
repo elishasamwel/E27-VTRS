@@ -3,7 +3,6 @@ import { useAuth } from '../context/AuthContext';
 import {
   LayoutDashboard,
   Car,
-  FileSpreadsheet,
   Users,
   Activity,
   BarChart3,
@@ -37,7 +36,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'vehicles', label: 'Vehicles', icon: Car },
     { id: 'vessels-manifests', label: 'Vessels & Manifests', icon: Ship },
-    { id: 'manifest-upload', label: 'Manifest Upload', icon: FileSpreadsheet },
     { id: 'users', label: 'Users', icon: Users },
     { id: 'activity-logs', label: 'Activity Logs', icon: Activity },
     { id: 'reports', label: 'Reports', icon: BarChart3 },

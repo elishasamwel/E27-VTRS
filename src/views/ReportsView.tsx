@@ -135,9 +135,9 @@ export const ReportsView: React.FC = () => {
     const rows = vehicles
       .map(
         (v) =>
-          `"${v.serialNumber}","${v.chassisNumber}","${v.description.replace(/"/g, '""')}","${
+          `"${v.serialNumber || ''}","${v.chassisNumber || ''}","${(v.description || '').replace(/"/g, '""')}","${
             v.vesselName || ''
-          }","${v.voyageNumber || ''}","${v.status}","${v.releasedByName || ''}","${
+          }","${v.voyageNumber || ''}","${v.status || ''}","${v.releasedByName || ''}","${
             v.releasedAt || ''
           }","${v.receivedByName || ''}","${v.receivedAt || ''}"`
       )
@@ -303,9 +303,9 @@ export const ReportsView: React.FC = () => {
                 string,
                 { total: number; atPort: number; onTransit: number; received: number }
               ][]
-            ).map(([vslName, vslStats]) => (
+            ).map(([vslName, vslStats], idx) => (
               <div
-                key={vslName}
+                key={`vsl-card-${vslName}-${idx}`}
                 onClick={() => setVesselFilter(vslName === vesselFilter ? 'ALL' : vslName)}
                 className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
                   vesselFilter === vslName
@@ -377,15 +377,15 @@ export const ReportsView: React.FC = () => {
               className="px-3 py-1.5 text-xs font-bold text-blue-900 bg-blue-50 border border-blue-200 rounded-xl focus:outline-none"
             >
               <option value="ALL">All Vessels</option>
-              {availableVessels.map((vsl) => (
-                <option key={vsl} value={vsl}>
+              {availableVessels.map((vsl, idx) => (
+                <option key={`rep-vsl-${vsl}-${idx}`} value={vsl}>
                   {vsl}
                 </option>
               ))}
               {availableVessels.length === 0 && (
                 <>
-                  <option value="MV TRANS CARRIER">MV TRANS CARRIER</option>
-                  <option value="MV PACIFIC GLORY">MV PACIFIC GLORY</option>
+                  <option key="rep-fallback-1" value="MV TRANS CARRIER">MV TRANS CARRIER</option>
+                  <option key="rep-fallback-2" value="MV PACIFIC GLORY">MV PACIFIC GLORY</option>
                 </>
               )}
             </select>
@@ -440,8 +440,8 @@ export const ReportsView: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                vehicles.map((v) => (
-                  <tr key={v.id} className="hover:bg-slate-50/80">
+                vehicles.map((v, idx) => (
+                  <tr key={`rep-row-${v.id || ''}-${v.chassisNumber || ''}-${idx}`} className="hover:bg-slate-50/80">
                     <td className="py-3 px-4 font-bold text-slate-600">{v.serialNumber}</td>
                     <td className="py-3 px-4 font-mono font-bold text-slate-900">{v.chassisNumber}</td>
                     <td className="py-3 px-4 text-slate-700">{v.description}</td>

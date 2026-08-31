@@ -1,6 +1,8 @@
+import fs from 'fs';
+import path from 'path';
 import { User, Vehicle, VehicleHistoryItem, Manifest, AuditLog, VehicleStatus, MarineVessel } from '../src/types';
 
-// In-memory persistent database store with initial demo data
+// Persistent database store with JSON file durability and initial seed fallback
 class Database {
   private users: User[] = [];
   private userPasswords: Map<string, string> = new Map(); // id -> password
@@ -9,8 +11,67 @@ class Database {
   private manifests: Manifest[] = [];
   private auditLogs: AuditLog[] = [];
   private vessels: MarineVessel[] = [];
+  private filePath = path.join(process.cwd(), 'data', 'vtms-database.json');
 
   constructor() {
+    this.loadFromFile();
+  }
+
+  private saveToFile() {
+    try {
+      const dir = path.dirname(this.filePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      const data = {
+        users: this.users,
+        userPasswords: Object.fromEntries(this.userPasswords),
+        vehicles: this.vehicles,
+        history: this.history,
+        manifests: this.manifests,
+        auditLogs: this.auditLogs,
+        vessels: this.vessels,
+      };
+      fs.writeFileSync(this.filePath, JSON.stringify(data, null, 2), 'utf-8');
+    } catch (err) {
+      console.error('[DB] Failed to persist database to file:', err);
+    }
+  }
+
+  private loadFromFile() {
+    try {
+      if (fs.existsSync(this.filePath)) {
+        const raw = fs.readFileSync(this.filePath, 'utf-8');
+        const data = JSON.parse(raw);
+        if (data && Array.isArray(data.users) && data.users.length > 0) {
+          this.users = data.users;
+          this.userPasswords = new Map(Object.entries(data.userPasswords || {}));
+          this.vehicles = data.vehicles || [];
+          this.history = data.history || [];
+          this.manifests = data.manifests || [];
+          this.auditLogs = data.auditLogs || [];
+          this.vessels = (data.vessels || []).filter((v: MarineVessel) => v.name.toUpperCase() !== 'E27' && v.id !== 'e27');
+
+          // Ensure default admin user always exists and is active
+          if (!this.users.some((u) => u.username === 'admin')) {
+            const adminUser: User = {
+              id: 'usr-admin-1',
+              name: 'Elisha Samwel',
+              email: 'admin@e27.co.tz',
+              username: 'admin',
+              role: 'ADMIN',
+              status: 'ACTIVE',
+              createdAt: new Date().toISOString(),
+            };
+            this.users.unshift(adminUser);
+            this.userPasswords.set(adminUser.id, 'admin123');
+          }
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('[DB] Failed to load database from file, re-seeding baseline:', err);
+    }
     this.seedInitialData();
   }
 
@@ -488,29 +549,57 @@ class Database {
       userRole: galcoUser.role,
       timestamp: todayIso,
     });
+
+    this.saveToFile();
   }
 
   // User methods
-  public authenticate(identifier: string, passwordAttempt: string): User | null {
+  public authenticateResult(
+    identifier: string,
+    passwordAttempt: string
+  ): { success: boolean; user?: User; error?: string; isPending?: boolean } {
     const cleanId = identifier.trim().toLowerCase();
     const user = this.users.find(
       (u) => u.email.toLowerCase() === cleanId || u.username.toLowerCase() === cleanId
     );
-    if (!user || user.status !== 'ACTIVE') return null;
+    if (!user) {
+      return { success: false, error: 'Invalid username or password.' };
+    }
 
     const storedPass = this.userPasswords.get(user.id);
-    if (storedPass === passwordAttempt) {
-      user.lastLogin = new Date().toISOString();
-      this.logAudit({
-        action: 'User Logged In',
-        details: `User ${user.name} logged in successfully as ${user.role}.`,
-        userId: user.id,
-        userName: user.name,
-        userRole: user.role,
-      });
-      return { ...user };
+    if (storedPass !== passwordAttempt) {
+      return { success: false, error: 'Invalid username or password.' };
     }
-    return null;
+
+    if (user.status === 'PENDING_APPROVAL') {
+      return {
+        success: false,
+        error: 'Your account registration is pending Administrator approval. Please wait for an Admin to activate your account.',
+        isPending: true,
+      };
+    }
+
+    if (user.status === 'INACTIVE') {
+      return {
+        success: false,
+        error: 'Your account has been deactivated. Please contact the Administrator.',
+      };
+    }
+
+    user.lastLogin = new Date().toISOString();
+    this.logAudit({
+      action: 'User Logged In',
+      details: `User ${user.name} (@${user.username}) logged in successfully as ${user.role}.`,
+      userId: user.id,
+      userName: user.name,
+      userRole: user.role,
+    });
+    return { success: true, user: { ...user } };
+  }
+
+  public authenticate(identifier: string, passwordAttempt: string): User | null {
+    const result = this.authenticateResult(identifier, passwordAttempt);
+    return result.success && result.user ? result.user : null;
   }
 
   public getUsers(): User[] {
@@ -521,6 +610,97 @@ class Database {
     return this.users.find((u) => u.id === id);
   }
 
+  public registerUser(payload: {
+    name: string;
+    username: string;
+    email?: string;
+    password: string;
+    role: any;
+  }): { success: boolean; user?: User; error?: string } {
+    const cleanUsername = payload.username.trim().toLowerCase();
+    const cleanEmail = (payload.email || '').trim().toLowerCase();
+
+    if (!cleanUsername || !payload.password || !payload.name.trim()) {
+      return { success: false, error: 'Full name, username, and password are required.' };
+    }
+
+    const existing = this.users.find(
+      (u) =>
+        u.username.toLowerCase() === cleanUsername ||
+        (cleanEmail && u.email.toLowerCase() === cleanEmail)
+    );
+    if (existing) {
+      return { success: false, error: 'A user with this username or email already exists.' };
+    }
+
+    const assignedRole = payload.role === 'ADMIN' || payload.role === 'GALCO_RECEIVING' ? payload.role : 'PORT_RELEASE';
+
+    const newUser: User = {
+      id: `usr-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      name: payload.name.trim(),
+      username: cleanUsername,
+      email: cleanEmail || `${cleanUsername}@e27.co.tz`,
+      role: assignedRole,
+      status: 'PENDING_APPROVAL',
+      createdAt: new Date().toISOString(),
+    };
+
+    this.users.push(newUser);
+    this.userPasswords.set(newUser.id, payload.password);
+
+    this.logAudit({
+      action: 'User Registered (Pending Approval)',
+      details: `New self-registration by ${newUser.name} (@${newUser.username}) requested role: ${newUser.role}. Status: PENDING_APPROVAL.`,
+      userId: newUser.id,
+      userName: newUser.name,
+      userRole: newUser.role,
+    });
+
+    return { success: true, user: { ...newUser } };
+  }
+
+  public approveUser(userId: string, actor: User): { success: boolean; user?: User; error?: string } {
+    const user = this.users.find((u) => u.id === userId);
+    if (!user) {
+      return { success: false, error: 'User account not found.' };
+    }
+
+    user.status = 'ACTIVE';
+    this.logAudit({
+      action: 'User Approved & Activated',
+      details: `Admin ${actor.name} approved and activated account for ${user.name} (@${user.username}) with role ${user.role}.`,
+      userId: actor.id,
+      userName: actor.name,
+      userRole: actor.role,
+    });
+
+    return { success: true, user: { ...user } };
+  }
+
+  public deleteUser(userId: string, actor: User): { success: boolean; error?: string } {
+    const idx = this.users.findIndex((u) => u.id === userId);
+    if (idx === -1) {
+      return { success: false, error: 'User not found.' };
+    }
+    const user = this.users[idx];
+    if (user.username === 'admin') {
+      return { success: false, error: 'Cannot delete the primary System Administrator account.' };
+    }
+
+    this.users.splice(idx, 1);
+    this.userPasswords.delete(userId);
+
+    this.logAudit({
+      action: 'User Removed',
+      details: `Admin ${actor.name} removed user account ${user.name} (@${user.username}).`,
+      userId: actor.id,
+      userName: actor.name,
+      userRole: actor.role,
+    });
+
+    return { success: true };
+  }
+
   public createUser(user: Omit<User, 'id' | 'createdAt'>, password: string, actor: User): User {
     const newUser: User = {
       ...user,
@@ -528,7 +708,7 @@ class Database {
       createdAt: new Date().toISOString(),
     };
     this.users.push(newUser);
-    this.userPasswords.set(newUser.id, password || 'galco123');
+    this.userPasswords.set(newUser.id, password || 'e27pass123');
 
     this.logAudit({
       action: 'User Created',
@@ -585,14 +765,14 @@ class Database {
     // Filter by operational vessel visibility for operational users or if operationalOnly is true
     const isOperationalRole = actor && (actor.role === 'PORT_RELEASE' || actor.role === 'GALCO_RECEIVING');
     if (filters?.operationalOnly || isOperationalRole) {
-      const visibleVesselNames = new Set(
+      const hiddenVesselNames = new Set(
         this.vessels
-          .filter((v) => v.isVisibleInOperations)
+          .filter((v) => v.isVisibleInOperations === false)
           .map((v) => v.name.toUpperCase())
       );
       result = result.filter((v) => {
         if (!v.vesselName) return true;
-        return visibleVesselNames.has(v.vesselName.toUpperCase());
+        return !hiddenVesselNames.has(v.vesselName.toUpperCase());
       });
     }
 
@@ -609,9 +789,9 @@ class Database {
       const q = filters.search.trim().toUpperCase();
       result = result.filter(
         (v) =>
-          v.chassisNumber.toUpperCase().includes(q) ||
-          v.description.toUpperCase().includes(q) ||
-          String(v.serialNumber).includes(q) ||
+          (v.chassisNumber || '').toUpperCase().includes(q) ||
+          (v.description || '').toUpperCase().includes(q) ||
+          String(v.serialNumber || '').includes(q) ||
           (v.vesselName && v.vesselName.toUpperCase().includes(q)) ||
           (v.voyageNumber && v.voyageNumber.toUpperCase().includes(q))
       );
@@ -682,9 +862,9 @@ class Database {
 
     // Fallback: substring match in chassis or serial or description or vessel
     return pool.filter((v) => {
-      const chassis = v.chassisNumber.trim().toUpperCase();
-      const desc = v.description.trim().toUpperCase();
-      const serial = String(v.serialNumber).toUpperCase();
+      const chassis = (v.chassisNumber || '').trim().toUpperCase();
+      const desc = (v.description || '').trim().toUpperCase();
+      const serial = String(v.serialNumber || '').toUpperCase();
       const vessel = (v.vesselName || '').toUpperCase();
       return (
         chassis.includes(cleanQuery) ||
@@ -749,6 +929,73 @@ class Database {
     this.logAudit({
       action: 'Vehicle Released from Port',
       details: `Vehicle Serial #${vehicle.serialNumber} (${vehicle.chassisNumber} - ${vehicle.description}, Vessel: ${vehicle.vesselName || 'N/A'}) status changed from AT PORT to ON TRANSIT.`,
+      vehicleId: vehicle.id,
+      chassisNumber: vehicle.chassisNumber,
+      vesselName: vehicle.vesselName,
+      userId: actor.id,
+      userName: actor.name,
+      userRole: actor.role,
+    });
+
+    return { success: true, vehicle: { ...vehicle } };
+  }
+
+  // Workflow Action 1B: Undo / Revert Port Release (ON TRANSIT -> AT PORT)
+  public undoPortRelease(
+    vehicleId: string,
+    actor: User,
+    reason?: string
+  ): { success: boolean; error?: string; vehicle?: Vehicle } {
+    const vehicle = this.vehicles.find((v) => v.id === vehicleId);
+    if (!vehicle) {
+      return { success: false, error: 'Vehicle not found with this identifier.' };
+    }
+
+    if (vehicle.status !== 'ON TRANSIT') {
+      if (vehicle.status === 'AT PORT') {
+        return {
+          success: false,
+          error: `Vehicle (${vehicle.chassisNumber}) is already AT PORT.`,
+        };
+      }
+      if (vehicle.status === 'RECEIVED AT GALCO') {
+        return {
+          success: false,
+          error: `Cannot undo port release because vehicle (${vehicle.chassisNumber}) has already arrived and been RECEIVED AT GALCO / E27 Yard. Use Admin override if status adjustment is required.`,
+        };
+      }
+      return { success: false, error: 'Invalid action for current vehicle status.' };
+    }
+
+    const now = new Date().toISOString();
+    const previousStatus = vehicle.status;
+    const releasedByNameBefore = vehicle.releasedByName;
+
+    vehicle.status = 'AT PORT';
+    vehicle.updatedAt = now;
+    delete vehicle.releasedByUserId;
+    delete vehicle.releasedByName;
+    delete vehicle.releasedAt;
+
+    // Record History with Reversal Context
+    this.history.push({
+      id: `hist-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      vehicleId: vehicle.id,
+      action: 'Port Release Undone',
+      previousStatus,
+      newStatus: 'AT PORT',
+      userId: actor.id,
+      userName: actor.name,
+      userRole: actor.role,
+      vesselName: vehicle.vesselName,
+      timestamp: now,
+      notes: reason || `Port release undone by ${actor.name} (previously marked released by ${releasedByNameBefore || 'officer'}). Returned to AT PORT.`,
+    });
+
+    // Audit Log
+    this.logAudit({
+      action: 'Port Release Undone',
+      details: `Vehicle Serial #${vehicle.serialNumber} (${vehicle.chassisNumber} - ${vehicle.description}, Vessel: ${vehicle.vesselName || 'N/A'}) port release was reverted by ${actor.name}. Status returned from ON TRANSIT to AT PORT. ${reason ? 'Reason: ' + reason : ''}`,
       vehicleId: vehicle.id,
       chassisNumber: vehicle.chassisNumber,
       vesselName: vehicle.vesselName,
@@ -978,9 +1225,11 @@ class Database {
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
-      const serialNumber = row.serialNumber !== undefined && row.serialNumber !== null ? String(row.serialNumber).trim() : `${i + 1}`;
+      const serialNumber = row.serialNumber !== undefined && row.serialNumber !== null && String(row.serialNumber).trim() !== ''
+        ? String(row.serialNumber).trim()
+        : `${i + 1}`;
       const chassisNumber = (row.chassisNumber ? String(row.chassisNumber).trim().toUpperCase() : '');
-      const description = (row.description ? String(row.description).trim() : '');
+      const description = (row.description && String(row.description).trim() ? String(row.description).trim() : 'N/A');
       const vesselName = (row.vesselName ? String(row.vesselName).trim().toUpperCase() : (defaultVessel ? defaultVessel.trim().toUpperCase() : undefined));
       const voyageNumber = (row.voyageNumber ? String(row.voyageNumber).trim().toUpperCase() : (defaultVoyage ? defaultVoyage.trim().toUpperCase() : undefined));
 
@@ -991,9 +1240,9 @@ class Database {
       if (!chassisNumber) {
         isValid = false;
         errorMessage = 'Missing chassis number';
-      } else if (!description) {
+      } else if (!serialNumber) {
         isValid = false;
-        errorMessage = 'Missing vehicle description';
+        errorMessage = 'Missing serial number';
       } else if (seenChassisInFile.has(chassisNumber)) {
         isValid = false;
         isDuplicate = true;
@@ -1350,6 +1599,7 @@ class Database {
     if (this.auditLogs.length > 500) {
       this.auditLogs.pop();
     }
+    this.saveToFile();
   }
 
   // Manifest list

@@ -12,35 +12,9 @@ interface AuthContextType {
   login: (identifier: string, pass: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   logout: () => void;
-  switchDemoRole: (role: UserRole) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// Built-in demo accounts for quick role switching / testing
-export const DEMO_ACCOUNTS = {
-  ADMIN: {
-    email: 'admin@galco.co.tz',
-    username: 'admin',
-    pass: 'admin123',
-    role: 'ADMIN' as UserRole,
-    name: 'Elisha Samwel (System Admin)',
-  },
-  PORT_RELEASE: {
-    email: 'port@galco.co.tz',
-    username: 'port_officer',
-    pass: 'port123',
-    role: 'PORT_RELEASE' as UserRole,
-    name: 'John Mrosso (TPA Port Officer)',
-  },
-  GALCO_RECEIVING: {
-    email: 'yard@galco.co.tz',
-    username: 'galco_receiver',
-    pass: 'yard123',
-    role: 'GALCO_RECEIVING' as UserRole,
-    name: 'Hamis Bakari (E27 Yard Officer)',
-  },
-};
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -72,30 +46,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         setUser(appUser);
-        localStorage.setItem('galco_user', JSON.stringify(appUser));
+        localStorage.setItem('e27_user', JSON.stringify(appUser));
         setIsLoading(false);
       } else {
-        // Fallback to local cached user or default admin
-        const savedUser = localStorage.getItem('galco_user');
+        // Fallback to local cached user
+        const savedUser = localStorage.getItem('e27_user') || localStorage.getItem('galco_user');
         if (savedUser) {
           try {
             setUser(JSON.parse(savedUser));
           } catch (e) {
             console.error('Failed to parse cached session', e);
           }
-        } else {
-          // Default to Admin logged in for instant preview convenience
-          const defaultAdmin: User = {
-            id: 'usr-admin-1',
-            name: 'Elisha Samwel',
-            email: 'admin@galco.co.tz',
-            username: 'admin',
-            role: 'ADMIN',
-            status: 'ACTIVE',
-            createdAt: new Date().toISOString(),
-          };
-          setUser(defaultAdmin);
-          localStorage.setItem('galco_user', JSON.stringify(defaultAdmin));
         }
         if (!auth.currentUser) {
           signInAnonymously(auth).catch(() => {});
@@ -112,7 +73,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const { user: authedUser } = await ApiService.login(identifier, pass);
       setUser(authedUser);
-      localStorage.setItem('galco_user', JSON.stringify(authedUser));
+      localStorage.setItem('e27_user', JSON.stringify(authedUser));
       try {
         await FirestoreService.setUser(authedUser);
       } catch (e) {
@@ -145,7 +106,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       await FirestoreService.setUser(appUser);
       setUser(appUser);
-      localStorage.setItem('galco_user', JSON.stringify(appUser));
+      localStorage.setItem('e27_user', JSON.stringify(appUser));
     } finally {
       setIsLoading(false);
     }
@@ -158,38 +119,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn('Firebase logout warning:', e);
     }
     setUser(null);
+    localStorage.removeItem('e27_user');
     localStorage.removeItem('galco_user');
-  };
-
-  const switchDemoRole = async (role: UserRole) => {
-    setIsLoading(true);
-    try {
-      const demoAcc = DEMO_ACCOUNTS[role];
-      const { user: authedUser } = await ApiService.login(demoAcc.email, demoAcc.pass);
-      setUser(authedUser);
-      localStorage.setItem('galco_user', JSON.stringify(authedUser));
-      try {
-        await FirestoreService.setUser(authedUser);
-      } catch (e) {
-        console.warn('[Firebase] User sync warning:', e);
-      }
-    } catch (e) {
-      // Local fallback in case of connection edge case
-      const demoAcc = DEMO_ACCOUNTS[role];
-      const mockUser: User = {
-        id: role === 'ADMIN' ? 'usr-admin-1' : role === 'PORT_RELEASE' ? 'usr-port-1' : 'usr-galco-1',
-        name: demoAcc.name,
-        email: demoAcc.email,
-        username: demoAcc.username,
-        role,
-        status: 'ACTIVE',
-        createdAt: new Date().toISOString(),
-      };
-      setUser(mockUser);
-      localStorage.setItem('galco_user', JSON.stringify(mockUser));
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   return (
@@ -201,7 +132,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         loginWithGoogle,
         logout,
-        switchDemoRole,
       }}
     >
       {children}

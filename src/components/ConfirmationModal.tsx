@@ -1,11 +1,11 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AlertCircle, CheckCircle, X, Truck, Anchor, Ship } from 'lucide-react';
+import { AlertCircle, CheckCircle, X, Truck, Anchor, Ship, RotateCcw, Undo2 } from 'lucide-react';
 import { Vehicle } from '../types';
 
 interface ConfirmationModalProps {
   isOpen: boolean;
-  type: 'RELEASE' | 'RECEIVE' | 'DELETE' | 'OVERRIDE';
+  type: 'RELEASE' | 'RECEIVE' | 'DELETE' | 'OVERRIDE' | 'UNDO_RELEASE';
   vehicle: Vehicle | null;
   onConfirm: (notes?: string) => void;
   onCancel: () => void;
@@ -33,6 +33,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   const isRelease = type === 'RELEASE';
   const isReceive = type === 'RECEIVE';
   const isDelete = type === 'DELETE';
+  const isUndoRelease = type === 'UNDO_RELEASE';
 
   return (
     <AnimatePresence>
@@ -52,6 +53,8 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                 ? 'bg-emerald-50/80 border-emerald-100'
                 : isDelete
                 ? 'bg-rose-50/80 border-rose-100'
+                : isUndoRelease
+                ? 'bg-amber-50/90 border-amber-200'
                 : 'bg-slate-50 border-slate-100'
             }`}
           >
@@ -64,31 +67,36 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                     ? 'bg-emerald-600 text-white'
                     : isDelete
                     ? 'bg-rose-600 text-white'
+                    : isUndoRelease
+                    ? 'bg-amber-600 text-white'
                     : 'bg-blue-600 text-white'
                 }`}
               >
                 {isRelease && <Truck className="w-5 h-5" />}
                 {isReceive && <CheckCircle className="w-5 h-5" />}
                 {isDelete && <AlertCircle className="w-5 h-5" />}
+                {isUndoRelease && <RotateCcw className="w-5 h-5" />}
               </div>
               <div>
                 <h3 className="text-base font-bold text-slate-900">
                   {isRelease && 'Confirm Departure from Port'}
                   {isReceive && 'Confirm Receipt at E27'}
                   {isDelete && 'Delete Vehicle Record'}
+                  {isUndoRelease && 'Undo Port Release (Mistaken Departure)'}
                   {type === 'OVERRIDE' && 'Confirm Status Override'}
                 </h3>
                 <p className="text-xs text-slate-600 font-medium">
                   {isRelease && 'DAR ES SALAAM PORT (TPA) → ON TRANSIT'}
                   {isReceive && 'ON TRANSIT → E27 YARD'}
                   {isDelete && 'Permanent deletion from database'}
+                  {isUndoRelease && 'ON TRANSIT → RETURN TO AT PORT'}
                 </p>
               </div>
             </div>
             <button
               onClick={onCancel}
               disabled={isLoading}
-              className="p-1 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-black/5"
+              className="p-1 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-black/5 cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -96,10 +104,21 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
 
           {/* Body */}
           <div className="p-6 space-y-4">
-            <div className="text-sm text-slate-700 leading-relaxed">
+            <div className="text-sm text-slate-700 leading-relaxed font-medium">
               {isRelease && 'Are you sure this vehicle has departed from the port?'}
               {isReceive && 'Confirm that this vehicle has physically arrived at E27?'}
               {isDelete && 'Are you sure you want to permanently delete this vehicle from the system? This action cannot be undone.'}
+              {isUndoRelease && (
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-xs leading-relaxed space-y-1">
+                  <p className="font-bold flex items-center gap-1.5 text-amber-800">
+                    <AlertCircle className="w-4 h-4 text-amber-600" />
+                    Reverting Mistaken Release
+                  </p>
+                  <p>
+                    This will undo the port departure timestamp and return the vehicle back to <strong>AT PORT</strong> status. It will immediately reappear in the Port Release queue for re-inspection.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Vehicle Summary Card */}
@@ -133,7 +152,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
             {!isDelete && (
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Operational Notes (Optional)
+                  {isUndoRelease ? 'Reason for Reversal (Optional)' : 'Operational Notes (Optional)'}
                 </label>
                 <input
                   type="text"
@@ -142,7 +161,11 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                   placeholder={
                     isRelease
                       ? 'e.g., Driver Name, Carrier Truck Reg #, Gate 4'
-                      : 'e.g., Parked at Yard Bay B-07, Exterior checked'
+                      : isReceive
+                      ? 'e.g., Parked at Yard Bay B-07, Exterior checked'
+                      : isUndoRelease
+                      ? 'e.g., Clicked by mistake, wrong truck assigned, gate turnaround'
+                      : 'Operational note...'
                   }
                   className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
@@ -156,7 +179,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
               type="button"
               onClick={onCancel}
               disabled={isLoading}
-              className="px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-xs"
+              className="px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-xs cursor-pointer"
             >
               Cancel
             </button>
@@ -164,13 +187,15 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
               type="button"
               onClick={() => onConfirm(notes)}
               disabled={isLoading}
-              className={`px-5 py-2.5 text-sm font-bold text-white rounded-lg transition-all shadow-md flex items-center gap-2 ${
+              className={`px-5 py-2.5 text-sm font-bold text-white rounded-lg transition-all shadow-md flex items-center gap-2 cursor-pointer ${
                 isRelease
                   ? 'bg-orange-600 hover:bg-orange-700 focus:ring-2 focus:ring-orange-500'
                   : isReceive
                   ? 'bg-emerald-600 hover:bg-emerald-700 focus:ring-2 focus:ring-emerald-500'
                   : isDelete
                   ? 'bg-rose-600 hover:bg-rose-700 focus:ring-2 focus:ring-rose-500'
+                  : isUndoRelease
+                  ? 'bg-amber-600 hover:bg-amber-700 focus:ring-2 focus:ring-amber-500'
                   : 'bg-blue-600 hover:bg-blue-700'
               }`}
             >
@@ -190,6 +215,11 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                 <>
                   <AlertCircle className="w-4 h-4" />
                   <span>Delete Vehicle</span>
+                </>
+              ) : isUndoRelease ? (
+                <>
+                  <RotateCcw className="w-4 h-4" />
+                  <span>Undo Port Release & Return to Port</span>
                 </>
               ) : (
                 <span>Confirm</span>

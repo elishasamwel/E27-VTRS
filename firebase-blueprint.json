@@ -10,7 +10,7 @@
         "email": { "type": "string", "maxLength": 150 },
         "username": { "type": "string", "maxLength": 50 },
         "role": { "type": "string", "enum": ["ADMIN", "PORT_RELEASE", "GALCO_RECEIVING"] },
-        "status": { "type": "string", "enum": ["ACTIVE", "INACTIVE"] },
+        "status": { "type": "string", "enum": ["ACTIVE", "INACTIVE", "PENDING_APPROVAL"] },
         "createdAt": { "type": "string", "maxLength": 50 },
         "lastLogin": { "type": "string", "maxLength": 50 }
       },

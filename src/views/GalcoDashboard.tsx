@@ -135,8 +135,8 @@ export const GalcoDashboard: React.FC<GalcoDashboardProps> = ({
               className="text-xs font-bold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
             >
               <option value="ALL">All Marine Vessels ({availableVessels.length})</option>
-              {availableVessels.map((vsl) => (
-                <option key={vsl} value={vsl}>
+              {availableVessels.map((vsl, idx) => (
+                <option key={`galco-vsl-${vsl}-${idx}`} value={vsl}>
                   {vsl}
                 </option>
               ))}
@@ -221,9 +221,9 @@ export const GalcoDashboard: React.FC<GalcoDashboardProps> = ({
                 No vehicles currently on transit {selectedVessel !== 'ALL' ? `for ${selectedVessel}` : ''}.
               </div>
             ) : (
-              filteredOnTransit.map((veh) => (
+              filteredOnTransit.map((veh, idx) => (
                 <div
-                  key={veh.id}
+                  key={`galco-ontransit-${veh.id || ''}-${veh.chassisNumber || ''}-${idx}`}
                   onClick={() => onViewVehicle(veh)}
                   className="py-3 px-2.5 flex items-center justify-between gap-3 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
                 >
@@ -281,9 +281,9 @@ export const GalcoDashboard: React.FC<GalcoDashboardProps> = ({
                 No vehicles have been received in the yard yet.
               </div>
             ) : (
-              filteredReceived.slice(0, 10).map((veh) => (
+              filteredReceived.slice(0, 10).map((veh, idx) => (
                 <div
-                  key={veh.id}
+                  key={`galco-recv-${veh.id || ''}-${veh.chassisNumber || ''}-${idx}`}
                   onClick={() => onViewVehicle(veh)}
                   className="py-3 px-2.5 flex items-center justify-between gap-3 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
                 >

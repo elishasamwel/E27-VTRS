@@ -26,6 +26,23 @@ export class ApiService {
     return data;
   }
 
+  static async register(payload: {
+    name: string;
+    username: string;
+    email?: string;
+    password: string;
+    role: string;
+  }): Promise<{ success: boolean; user: User; message: string }> {
+    const res = await fetch(`${API_BASE}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to register');
+    return data;
+  }
+
   // Vehicles
   static async getVehicles(params?: {
     status?: VehicleStatus | 'ALL';
@@ -94,6 +111,35 @@ export class ApiService {
         details: `Released vehicle ${data.vehicle.chassisNumber} to ON TRANSIT`,
         vehicleId: data.vehicle.id,
         chassisNumber: data.vehicle.chassisNumber,
+        userId: user?.id || 'sys',
+        userName: user?.name || 'User',
+        userRole: user?.role || 'PORT_RELEASE',
+        timestamp: new Date().toISOString(),
+      }).catch(console.warn);
+    }
+
+    return data.vehicle;
+  }
+
+  static async undoPortRelease(id: string, notes?: string, user?: User | null): Promise<Vehicle> {
+    const res = await fetch(`${API_BASE}/vehicles/${id}/undo-release`, {
+      method: 'POST',
+      headers: this.getHeaders(user),
+      body: JSON.stringify({ notes }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to undo port release');
+
+    // Sync to Firestore
+    if (data.vehicle) {
+      FirestoreService.setVehicle(data.vehicle).catch(console.warn);
+      FirestoreService.addAuditLog({
+        id: `aud-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+        action: 'VEHICLE_RELEASE_UNDONE',
+        details: `Reverted release of vehicle ${data.vehicle.chassisNumber} back to AT PORT`,
+        vehicleId: data.vehicle.id,
+        chassisNumber: data.vehicle.chassisNumber,
+        vesselName: data.vehicle.vesselName,
         userId: user?.id || 'sys',
         userName: user?.name || 'User',
         userRole: user?.role || 'PORT_RELEASE',
@@ -347,6 +393,32 @@ export class ApiService {
     }
 
     return data.user;
+  }
+
+  static async approveUser(id: string, user?: User | null): Promise<User> {
+    const res = await fetch(`${API_BASE}/users/${id}/approve`, {
+      method: 'POST',
+      headers: this.getHeaders(user),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to approve user');
+
+    if (data.user) {
+      FirestoreService.setUser(data.user).catch(console.warn);
+    }
+
+    return data.user;
+  }
+
+  static async deleteUser(id: string, user?: User | null): Promise<void> {
+    const res = await fetch(`${API_BASE}/users/${id}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(user),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to delete user');
+
+    FirestoreService.removeUser(id).catch(console.warn);
   }
 
   // Audit Logs

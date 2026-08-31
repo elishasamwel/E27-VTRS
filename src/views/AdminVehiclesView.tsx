@@ -21,6 +21,7 @@ import {
   FileSpreadsheet,
   Ship,
   Anchor,
+  RotateCcw,
 } from 'lucide-react';
 
 interface AdminVehiclesViewProps {
@@ -56,6 +57,7 @@ export const AdminVehiclesView: React.FC<AdminVehiclesViewProps> = ({
   // Modals state
   const [vehicleToEdit, setVehicleToEdit] = useState<Vehicle | null>(null);
   const [vehicleToDelete, setVehicleToDelete] = useState<Vehicle | null>(null);
+  const [vehicleToUndo, setVehicleToUndo] = useState<Vehicle | null>(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
 
   // Manual Add Vehicle Modal
@@ -164,6 +166,24 @@ export const AdminVehiclesView: React.FC<AdminVehiclesViewProps> = ({
     }
   };
 
+  // Undo Release Action (Admin Only)
+  const handleUndoReleaseConfirm = async (reason?: string) => {
+    if (!vehicleToUndo) return;
+    setIsActionLoading(true);
+    try {
+      const updated = await ApiService.undoPortRelease(vehicleToUndo.id, reason, user);
+      showSuccess(
+        `Vehicle ${updated.chassisNumber} port release reversed. Status returned to AT PORT.`
+      );
+      setVehicleToUndo(null);
+      loadVehicles();
+    } catch (err: any) {
+      showError(err.message || 'Failed to undo port release');
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
   // Edit Action
   const handleEditSave = async (updates: any) => {
     if (!vehicleToEdit) return;
@@ -259,9 +279,9 @@ export const AdminVehiclesView: React.FC<AdminVehiclesViewProps> = ({
     const rows = sortedVehicles
       .map(
         (v) =>
-          `"${v.serialNumber}","${v.chassisNumber}","${v.description.replace(/"/g, '""')}","${
+          `"${v.serialNumber || ''}","${v.chassisNumber || ''}","${(v.description || '').replace(/"/g, '""')}","${
             v.vesselName || ''
-          }","${v.voyageNumber || ''}","${v.status}","${v.releasedByName || ''}","${
+          }","${v.voyageNumber || ''}","${v.status || ''}","${v.releasedByName || ''}","${
             v.releasedAt || ''
           }","${v.receivedByName || ''}","${v.receivedAt || ''}"`
       )
@@ -362,19 +382,19 @@ export const AdminVehiclesView: React.FC<AdminVehiclesViewProps> = ({
               className="px-3 py-1.5 text-xs font-bold text-blue-900 bg-blue-50/80 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer"
             >
               <option value="ALL">All Marine Vessels ({availableVessels.length || 2})</option>
-              {availableVessels.map((vesselName) => {
-                const reg = registeredVessels.find((r) => r.name.toUpperCase() === vesselName.toUpperCase());
+              {availableVessels.map((vesselName, idx) => {
+                const reg = registeredVessels.find((r) => r.name?.toUpperCase() === vesselName?.toUpperCase());
                 const statusTag = reg ? (reg.status === 'COMPLETED' ? ' (Completed)' : reg.isVisibleInOperations ? ' (Active)' : ' (Hidden)') : '';
                 return (
-                  <option key={vesselName} value={vesselName}>
+                  <option key={`vsl-filter-${vesselName}-${idx}`} value={vesselName}>
                     🚢 {vesselName}{statusTag}
                   </option>
                 );
               })}
               {availableVessels.length === 0 && (
                 <>
-                  <option value="MV TRANS CARRIER">🚢 MV TRANS CARRIER (Active)</option>
-                  <option value="MV PACIFIC GLORY">🚢 MV PACIFIC GLORY (Active)</option>
+                  <option key="fallback-vsl-1" value="MV TRANS CARRIER">🚢 MV TRANS CARRIER (Active)</option>
+                  <option key="fallback-vsl-2" value="MV PACIFIC GLORY">🚢 MV PACIFIC GLORY (Active)</option>
                 </>
               )}
             </select>
@@ -493,9 +513,9 @@ export const AdminVehiclesView: React.FC<AdminVehiclesViewProps> = ({
                   </td>
                 </tr>
               ) : (
-                paginatedVehicles.map((veh) => (
+                paginatedVehicles.map((veh, idx) => (
                   <tr
-                    key={veh.id}
+                    key={`admin-veh-${veh.id || ''}-${veh.chassisNumber || ''}-${idx}`}
                     onClick={() => onViewVehicle(veh)}
                     className="hover:bg-slate-50/80 transition-colors cursor-pointer"
                   >
@@ -550,13 +570,25 @@ export const AdminVehiclesView: React.FC<AdminVehiclesViewProps> = ({
                     </td>
                     <td className="py-3.5 px-4 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5">
+                        {veh.status === 'ON TRANSIT' && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setVehicleToUndo(veh);
+                            }}
+                            title="Undo Port Release (Revert to AT PORT)"
+                            className="p-1.5 text-amber-700 hover:text-amber-800 hover:bg-amber-100 bg-amber-50 border border-amber-300 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             setVehicleToEdit(veh);
                           }}
                           title="Edit / Override Record"
-                          className="p-1.5 text-slate-600 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                          className="p-1.5 text-slate-600 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
@@ -566,7 +598,7 @@ export const AdminVehiclesView: React.FC<AdminVehiclesViewProps> = ({
                             setVehicleToDelete(veh);
                           }}
                           title="Delete Vehicle"
-                          className="p-1.5 text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                          className="p-1.5 text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -618,6 +650,16 @@ export const AdminVehiclesView: React.FC<AdminVehiclesViewProps> = ({
         vehicle={vehicleToDelete}
         onConfirm={handleDeleteConfirm}
         onCancel={() => setVehicleToDelete(null)}
+        isLoading={isActionLoading}
+      />
+
+      {/* Undo Port Release Confirmation Modal (Admin Only) */}
+      <ConfirmationModal
+        isOpen={!!vehicleToUndo}
+        type="UNDO_RELEASE"
+        vehicle={vehicleToUndo}
+        onConfirm={handleUndoReleaseConfirm}
+        onCancel={() => setVehicleToUndo(null)}
         isLoading={isActionLoading}
       />
 

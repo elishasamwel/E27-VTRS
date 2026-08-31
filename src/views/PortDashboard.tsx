@@ -36,7 +36,7 @@ export const PortDashboard: React.FC<PortDashboardProps> = ({
   const [loading, setLoading] = useState(true);
   const [selectedVessel, setSelectedVessel] = useState<string>('ALL');
 
-  // Quick Release from table
+  // Quick Release state
   const [selectedToRelease, setSelectedToRelease] = useState<Vehicle | null>(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
 
@@ -133,8 +133,8 @@ export const PortDashboard: React.FC<PortDashboardProps> = ({
               className="text-xs font-bold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
             >
               <option value="ALL">All Marine Vessels ({availableVessels.length})</option>
-              {availableVessels.map((vsl) => (
-                <option key={vsl} value={vsl}>
+              {availableVessels.map((vsl, idx) => (
+                <option key={`port-vsl-${vsl}-${idx}`} value={vsl}>
                   {vsl}
                 </option>
               ))}
@@ -143,7 +143,7 @@ export const PortDashboard: React.FC<PortDashboardProps> = ({
 
           <button
             onClick={loadPortData}
-            className="p-2.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl shadow-xs transition-colors"
+            className="p-2.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl shadow-xs transition-colors cursor-pointer"
             title="Refresh Port Data"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -220,9 +220,9 @@ export const PortDashboard: React.FC<PortDashboardProps> = ({
                 No vehicles currently waiting at port {selectedVessel !== 'ALL' ? `for ${selectedVessel}` : ''}.
               </div>
             ) : (
-              filteredAtPort.map((veh) => (
+              filteredAtPort.map((veh, idx) => (
                 <div
-                  key={veh.id}
+                  key={`port-atport-${veh.id || ''}-${veh.chassisNumber || ''}-${idx}`}
                   onClick={() => onViewVehicle(veh)}
                   className="py-3 px-2.5 flex items-center justify-between gap-3 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
                 >
@@ -248,7 +248,7 @@ export const PortDashboard: React.FC<PortDashboardProps> = ({
                         e.stopPropagation();
                         setSelectedToRelease(veh);
                       }}
-                      className="px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs rounded-lg shadow-xs flex items-center gap-1.5 transition-colors"
+                      className="px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs rounded-lg shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
                     >
                       <Truck className="w-3.5 h-3.5" />
                       <span>Release</span>
@@ -278,11 +278,11 @@ export const PortDashboard: React.FC<PortDashboardProps> = ({
                 No vehicles have been released yet.
               </div>
             ) : (
-              filteredReleased.slice(0, 10).map((veh) => (
+              filteredReleased.slice(0, 15).map((veh, idx) => (
                 <div
-                  key={veh.id}
+                  key={`port-rel-${veh.id || ''}-${veh.chassisNumber || ''}-${idx}`}
                   onClick={() => onViewVehicle(veh)}
-                  className="py-3 px-2.5 flex items-center justify-between gap-3 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
+                  className="py-3 px-2.5 flex items-center justify-between gap-3 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer group"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -310,7 +310,7 @@ export const PortDashboard: React.FC<PortDashboardProps> = ({
         </div>
       </div>
 
-      {/* Confirmation Modal */}
+      {/* Confirmation Modal for Release */}
       <ConfirmationModal
         isOpen={!!selectedToRelease}
         type="RELEASE"

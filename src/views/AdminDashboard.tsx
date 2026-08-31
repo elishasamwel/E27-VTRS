@@ -166,7 +166,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {stats?.onTransitCount ?? 0}
             </div>
             <div className="mt-1 text-xs text-orange-700 flex items-center justify-between">
-              <span>Travelling to GALCO yard</span>
+              <span>Travelling to E27 yard</span>
               <span className="font-semibold">{stats?.releasedTodayCount ?? 0} released today</span>
             </div>
           </div>
@@ -232,7 +232,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     dataKey="value"
                   >
                     {stats.statusDistribution.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      <Cell key={`pie-cell-${entry.name || ''}-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
                   <RechartsTooltip
@@ -362,9 +362,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </td>
                 </tr>
               ) : (
-                recentVehicles.map((veh) => (
+                recentVehicles.map((veh, idx) => (
                   <tr
-                    key={veh.id}
+                    key={`dash-recent-veh-${veh.id || ''}-${veh.chassisNumber || ''}-${idx}`}
                     onClick={() => onViewVehicle(veh)}
                     className="hover:bg-slate-50/80 transition-colors cursor-pointer"
                   >

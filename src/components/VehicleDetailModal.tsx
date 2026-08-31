@@ -2,37 +2,49 @@ import React, { useEffect, useState } from 'react';
 import { Vehicle, VehicleHistoryItem } from '../types';
 import { StatusBadge } from './StatusBadge';
 import { VehicleTimeline } from './VehicleTimeline';
+import { ConfirmationModal } from './ConfirmationModal';
 import { ApiService } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { X, Car, Calendar, User, Clock, FileText, ExternalLink, ShieldCheck, Ship, Anchor } from 'lucide-react';
+import { useNotification } from '../context/NotificationContext';
+import { X, Car, Calendar, User, Clock, FileText, ExternalLink, ShieldCheck, Ship, Anchor, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface VehicleDetailModalProps {
-  vehicleId: string | null;
+  vehicleId?: string | null;
+  vehicle?: Vehicle | null;
+  isOpen?: boolean;
   onClose: () => void;
   onEdit?: (vehicle: Vehicle) => void;
+  onStatusUpdated?: () => void;
 }
 
 export const VehicleDetailModal: React.FC<VehicleDetailModalProps> = ({
   vehicleId,
+  vehicle: initialVehicle,
+  isOpen = true,
   onClose,
   onEdit,
+  onStatusUpdated,
 }) => {
   const { user } = useAuth();
-  const [vehicle, setVehicle] = useState<Vehicle | null>(null);
+  const { showSuccess, showError } = useNotification();
+  const [vehicle, setVehicle] = useState<Vehicle | null>(initialVehicle || null);
   const [history, setHistory] = useState<VehicleHistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'profile' | 'timeline'>('profile');
+  const [isUndoModalOpen, setIsUndoModalOpen] = useState(false);
+  const [isUndoLoading, setIsUndoLoading] = useState(false);
 
-  useEffect(() => {
-    if (!vehicleId) {
-      setVehicle(null);
-      setHistory([]);
+  const effectiveId = vehicleId || initialVehicle?.id;
+
+  const loadDetails = () => {
+    if (!effectiveId) {
+      if (initialVehicle) setVehicle(initialVehicle);
       return;
     }
 
     setLoading(true);
-    ApiService.getVehicleDetails(vehicleId, user)
+    ApiService.getVehicleDetails(effectiveId, user)
       .then((data) => {
         setVehicle(data.vehicle);
         setHistory(data.history || []);
@@ -43,9 +55,37 @@ export const VehicleDetailModal: React.FC<VehicleDetailModalProps> = ({
       .finally(() => {
         setLoading(false);
       });
-  }, [vehicleId, user]);
+  };
 
-  if (!vehicleId) return null;
+  useEffect(() => {
+    if (isOpen && (effectiveId || initialVehicle)) {
+      loadDetails();
+    } else {
+      setVehicle(null);
+      setHistory([]);
+    }
+  }, [effectiveId, initialVehicle, isOpen, user]);
+
+  const handleConfirmUndoRelease = async (reason?: string) => {
+    if (!vehicle) return;
+    setIsUndoLoading(true);
+    try {
+      const updated = await ApiService.undoPortRelease(vehicle.id, reason, user);
+      showSuccess(
+        `Vehicle ${updated.chassisNumber} port release undone. Status returned to AT PORT.`
+      );
+      setVehicle(updated);
+      setIsUndoModalOpen(false);
+      loadDetails();
+      if (onStatusUpdated) onStatusUpdated();
+    } catch (err: any) {
+      showError(err.message || 'Failed to undo port release');
+    } finally {
+      setIsUndoLoading(false);
+    }
+  };
+
+  if (!isOpen || (!effectiveId && !initialVehicle)) return null;
 
   return (
     <AnimatePresence>
@@ -76,7 +116,7 @@ export const VehicleDetailModal: React.FC<VehicleDetailModalProps> = ({
             </div>
             <button
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
+              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -86,7 +126,7 @@ export const VehicleDetailModal: React.FC<VehicleDetailModalProps> = ({
           <div className="flex border-b border-slate-200 bg-slate-50 px-6 pt-2 gap-4">
             <button
               onClick={() => setActiveTab('profile')}
-              className={`pb-3 text-sm font-semibold border-b-2 transition-colors ${
+              className={`pb-3 text-sm font-semibold border-b-2 transition-colors cursor-pointer ${
                 activeTab === 'profile'
                   ? 'border-blue-600 text-blue-600'
                   : 'border-transparent text-slate-600 hover:text-slate-900'
@@ -96,7 +136,7 @@ export const VehicleDetailModal: React.FC<VehicleDetailModalProps> = ({
             </button>
             <button
               onClick={() => setActiveTab('timeline')}
-              className={`pb-3 text-sm font-semibold border-b-2 transition-colors ${
+              className={`pb-3 text-sm font-semibold border-b-2 transition-colors cursor-pointer ${
                 activeTab === 'timeline'
                   ? 'border-blue-600 text-blue-600'
                   : 'border-transparent text-slate-600 hover:text-slate-900'
@@ -108,7 +148,7 @@ export const VehicleDetailModal: React.FC<VehicleDetailModalProps> = ({
 
           {/* Modal Body */}
           <div className="p-6 overflow-y-auto flex-1 space-y-6">
-            {loading ? (
+            {loading && !vehicle ? (
               <div className="py-16 text-center text-slate-500 text-sm">
                 <div className="inline-block animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full mb-3" />
                 <p>Loading vehicle profile & transfer history...</p>
@@ -167,10 +207,22 @@ export const VehicleDetailModal: React.FC<VehicleDetailModalProps> = ({
 
                 {/* 2. Port Release Information */}
                 <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5" />
-                    Port Release Information (TPA)
-                  </h4>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5" />
+                      Port Release Information (TPA)
+                    </h4>
+                    {user?.role === 'ADMIN' && vehicle.status === 'ON TRANSIT' && (
+                      <button
+                        type="button"
+                        onClick={() => setIsUndoModalOpen(true)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg transition-colors cursor-pointer"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5 text-amber-700" />
+                        <span>Undo Port Release (Admin)</span>
+                      </button>
+                    )}
+                  </div>
                   <div
                     className={`p-4 rounded-xl border ${
                       vehicle.releasedAt
@@ -179,21 +231,28 @@ export const VehicleDetailModal: React.FC<VehicleDetailModalProps> = ({
                     }`}
                   >
                     {vehicle.releasedAt ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                        <div>
-                          <span className="text-xs text-slate-500 block">Released By Officer</span>
-                          <span className="font-semibold text-slate-900 flex items-center gap-1.5 mt-0.5">
-                            <User className="w-3.5 h-3.5 text-orange-600" />
-                            {vehicle.releasedByName || 'Port Release Officer'}
-                          </span>
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <span className="text-xs text-slate-500 block">Released By Officer</span>
+                            <span className="font-semibold text-slate-900 flex items-center gap-1.5 mt-0.5">
+                              <User className="w-3.5 h-3.5 text-orange-600" />
+                              {vehicle.releasedByName || 'Port Release Officer'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-xs text-slate-500 block">Release Date & Time</span>
+                            <span className="font-semibold text-slate-900 flex items-center gap-1.5 mt-0.5">
+                              <Clock className="w-3.5 h-3.5 text-orange-600" />
+                              {new Date(vehicle.releasedAt).toLocaleString()}
+                            </span>
+                          </div>
                         </div>
-                        <div>
-                          <span className="text-xs text-slate-500 block">Release Date & Time</span>
-                          <span className="font-semibold text-slate-900 flex items-center gap-1.5 mt-0.5">
-                            <Clock className="w-3.5 h-3.5 text-orange-600" />
-                            {new Date(vehicle.releasedAt).toLocaleString()}
-                          </span>
-                        </div>
+                        {vehicle.releaseNotes && (
+                          <div className="pt-2 border-t border-orange-200 text-xs text-orange-950">
+                            <span className="font-semibold">Release Notes:</span> {vehicle.releaseNotes}
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="text-xs text-slate-500 italic py-1">
@@ -252,6 +311,16 @@ export const VehicleDetailModal: React.FC<VehicleDetailModalProps> = ({
               Chassis ID: <span className="font-mono font-medium text-slate-700">{vehicle?.id}</span>
             </div>
             <div className="flex items-center gap-2">
+              {user?.role === 'ADMIN' && vehicle?.status === 'ON TRANSIT' && (
+                <button
+                  type="button"
+                  onClick={() => setIsUndoModalOpen(true)}
+                  className="inline-flex items-center gap-1 px-3 py-2 text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-amber-700" />
+                  <span>Undo Port Release</span>
+                </button>
+              )}
               {user?.role === 'ADMIN' && onEdit && vehicle && (
                 <button
                   type="button"
@@ -259,7 +328,7 @@ export const VehicleDetailModal: React.FC<VehicleDetailModalProps> = ({
                     onClose();
                     onEdit(vehicle);
                   }}
-                  className="px-3 py-2 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+                  className="px-3 py-2 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors cursor-pointer"
                 >
                   Edit / Override Record
                 </button>
@@ -267,7 +336,7 @@ export const VehicleDetailModal: React.FC<VehicleDetailModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-xs"
+                className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-xs cursor-pointer"
               >
                 Close
               </button>
@@ -275,6 +344,16 @@ export const VehicleDetailModal: React.FC<VehicleDetailModalProps> = ({
           </div>
         </motion.div>
       </div>
+
+      {/* Confirmation Modal for Undo Release */}
+      <ConfirmationModal
+        isOpen={isUndoModalOpen}
+        type="UNDO_RELEASE"
+        vehicle={vehicle}
+        onConfirm={handleConfirmUndoRelease}
+        onCancel={() => setIsUndoModalOpen(false)}
+        isLoading={isUndoLoading}
+      />
     </AnimatePresence>
   );
 };

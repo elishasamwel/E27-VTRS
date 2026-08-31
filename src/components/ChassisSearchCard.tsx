@@ -174,11 +174,11 @@ export const ChassisSearchCard: React.FC<ChassisSearchCardProps> = ({
               </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {results.map((veh) => {
+              {results.map((veh, idx) => {
                 const isSelected = selectedVehicle?.id === veh.id;
                 return (
                   <button
-                    key={veh.id}
+                    key={`search-res-${veh.id || ''}-${veh.chassisNumber || ''}-${idx}`}
                     onClick={() => setSelectedVehicle(veh)}
                     className={`p-3.5 rounded-xl border text-left transition-all ${
                       isSelected
