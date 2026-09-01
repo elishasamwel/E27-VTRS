@@ -256,6 +256,9 @@ export class ApiService {
     if (data.vessel) {
       FirestoreService.setVessel(data.vessel).catch(console.warn);
     }
+    if (data.createdVehicles && data.createdVehicles.length > 0) {
+      FirestoreService.batchSetVehicles(data.createdVehicles).catch(console.warn);
+    }
 
     return data;
   }
@@ -277,8 +280,9 @@ export class ApiService {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to delete manifest');
 
-    // Firestore sync: remove manifest record
+    // Firestore sync: remove manifest record and associated vehicles
     FirestoreService.removeManifest(id).catch(console.warn);
+    FirestoreService.removeVehiclesByManifestId(id).catch(console.warn);
 
     return { removedCount: data.removedCount || 0 };
   }
@@ -349,8 +353,28 @@ export class ApiService {
       body: JSON.stringify({ visibleVessels }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to update vessels visibility');
+    if (!res.ok) throw new Error(data.error || 'Failed to update vessel visibility');
     return data.vessels || [];
+  }
+
+  // Clear All Operational Data (Wipes both backend and Firestore)
+  static async clearAllData(user?: User | null): Promise<{ success: boolean; message: string }> {
+    // 1. Wipe Firestore collections in parallel
+    try {
+      await FirestoreService.clearAllOperationalData();
+    } catch (err) {
+      console.warn('[ApiService] Firestore purge warning:', err);
+    }
+
+    // 2. Wipe Backend server store
+    const res = await fetch(`${API_BASE}/admin/clear-data`, {
+      method: 'POST',
+      headers: this.getHeaders(user),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to clear operational data.');
+
+    return data;
   }
 
   // Users

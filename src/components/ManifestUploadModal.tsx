@@ -46,7 +46,7 @@ export const ManifestUploadModal: React.FC<ManifestUploadModalProps> = ({
     if (isOpen) {
       ApiService.getVessels(false, user)
         .then((list) => {
-          const names = Array.from(new Set(list.map((v) => v.name?.trim()).filter(Boolean)));
+          const names = Array.from(new Set((list || []).map((v) => v.name?.trim()).filter(Boolean)));
           setExistingVessels(names);
           if (names.length > 0 && !vesselName) {
             setVesselName(names[0]);
@@ -532,7 +532,7 @@ export const ManifestUploadModal: React.FC<ManifestUploadModalProps> = ({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {validationResult.rows.map((row, idx) => (
+                        {(validationResult?.rows || []).map((row, idx) => (
                           <tr
                             key={`val-row-${row.serialNumber || idx}-${row.chassisNumber || ''}-${idx}`}
                             className={

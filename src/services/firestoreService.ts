@@ -8,6 +8,8 @@ import {
   query,
   orderBy,
   limit,
+  where,
+  writeBatch,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { Vehicle, VehicleHistoryItem, Manifest, AuditLog, User, MarineVessel } from '../types';
@@ -28,6 +30,9 @@ export class FirestoreService {
         updatedAt: vehicle.updatedAt || new Date().toISOString(),
       };
       if (vehicle.manifestId) payload.manifestId = vehicle.manifestId;
+      if (vehicle.vesselName) payload.vesselName = vehicle.vesselName;
+      if (vehicle.voyageNumber) payload.voyageNumber = vehicle.voyageNumber;
+      if (vehicle.portOfDischarge) payload.portOfDischarge = vehicle.portOfDischarge;
       if (vehicle.releasedByUserId) payload.releasedByUserId = vehicle.releasedByUserId;
       if (vehicle.releasedByName) payload.releasedByName = vehicle.releasedByName;
       if (vehicle.releasedAt) payload.releasedAt = vehicle.releasedAt;
@@ -42,8 +47,34 @@ export class FirestoreService {
   }
 
   static async batchSetVehicles(vehicles: Vehicle[]): Promise<void> {
-    for (const v of vehicles) {
-      await this.setVehicle(v);
+    if (!vehicles || vehicles.length === 0) return;
+    for (let i = 0; i < vehicles.length; i += 450) {
+      const batch = writeBatch(db);
+      const chunk = vehicles.slice(i, i + 450);
+      for (const vehicle of chunk) {
+        const ref = doc(db, 'vehicles', vehicle.id);
+        const payload: any = {
+          id: vehicle.id,
+          serialNumber: String(vehicle.serialNumber || ''),
+          chassisNumber: (vehicle.chassisNumber || '').trim().toUpperCase(),
+          description: (vehicle.description || 'N/A').trim(),
+          status: vehicle.status || 'AT PORT',
+          createdAt: vehicle.createdAt || new Date().toISOString(),
+          updatedAt: vehicle.updatedAt || new Date().toISOString(),
+        };
+        if (vehicle.manifestId) payload.manifestId = vehicle.manifestId;
+        if (vehicle.vesselName) payload.vesselName = vehicle.vesselName;
+        if (vehicle.voyageNumber) payload.voyageNumber = vehicle.voyageNumber;
+        if (vehicle.portOfDischarge) payload.portOfDischarge = vehicle.portOfDischarge;
+        if (vehicle.releasedByUserId) payload.releasedByUserId = vehicle.releasedByUserId;
+        if (vehicle.releasedByName) payload.releasedByName = vehicle.releasedByName;
+        if (vehicle.releasedAt) payload.releasedAt = vehicle.releasedAt;
+        if (vehicle.receivedByUserId) payload.receivedByUserId = vehicle.receivedByUserId;
+        if (vehicle.receivedByName) payload.receivedByName = vehicle.receivedByName;
+        if (vehicle.receivedAt) payload.receivedAt = vehicle.receivedAt;
+        batch.set(ref, payload);
+      }
+      await batch.commit();
     }
   }
 
@@ -53,6 +84,42 @@ export class FirestoreService {
       await deleteDoc(doc(db, 'vehicles', vehicleId));
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, path);
+    }
+  }
+
+  static async removeVehiclesByManifestId(manifestId: string): Promise<void> {
+    try {
+      const q = query(collection(db, 'vehicles'), where('manifestId', '==', manifestId));
+      const snap = await getDocs(q);
+      const docs = snap.docs;
+      for (let i = 0; i < docs.length; i += 450) {
+        const batch = writeBatch(db);
+        const chunk = docs.slice(i, i + 450);
+        for (const d of chunk) {
+          batch.delete(d.ref);
+        }
+        await batch.commit();
+      }
+    } catch (err) {
+      console.warn('[FirestoreService] removeVehiclesByManifestId error:', err);
+    }
+  }
+
+  static async removeVehiclesByVessel(vesselName: string): Promise<void> {
+    try {
+      const q = query(collection(db, 'vehicles'), where('vesselName', '==', vesselName));
+      const snap = await getDocs(q);
+      const docs = snap.docs;
+      for (let i = 0; i < docs.length; i += 450) {
+        const batch = writeBatch(db);
+        const chunk = docs.slice(i, i + 450);
+        for (const d of chunk) {
+          batch.delete(d.ref);
+        }
+        await batch.commit();
+      }
+    } catch (err) {
+      console.warn('[FirestoreService] removeVehiclesByVessel error:', err);
     }
   }
 
@@ -71,6 +138,9 @@ export class FirestoreService {
             chassisNumber: d.chassisNumber,
             description: d.description,
             status: d.status,
+            vesselName: d.vesselName,
+            voyageNumber: d.voyageNumber,
+            portOfDischarge: d.portOfDischarge,
             createdAt: d.createdAt,
             updatedAt: d.updatedAt,
             manifestId: d.manifestId,
@@ -308,11 +378,38 @@ export class FirestoreService {
     );
   }
 
+  // Clear all operational data (vehicles, manifests, vehicle history, marine vessels, audit logs)
+  static async clearAllOperationalData(): Promise<void> {
+    const collectionsToClear = [
+      'vehicles',
+      'manifests',
+      'vehicle_history',
+      'marine_vessels',
+      'audit_logs',
+    ];
+    for (const colName of collectionsToClear) {
+      try {
+        const snap = await getDocs(collection(db, colName));
+        const docs = snap.docs;
+        for (let i = 0; i < docs.length; i += 450) {
+          const batch = writeBatch(db);
+          const chunk = docs.slice(i, i + 450);
+          for (const d of chunk) {
+            batch.delete(d.ref);
+          }
+          await batch.commit();
+        }
+      } catch (err) {
+        console.warn(`[FirestoreService] Could not clear collection ${colName}:`, err);
+      }
+    }
+  }
+
   // Initial Sync from server DB to Firestore if Firestore is empty
   static async initializeFirestoreWithDefaults(serverVehicles: Vehicle[], serverManifests: Manifest[], serverUsers: User[], serverLogs: AuditLog[]): Promise<void> {
     try {
       const snap = await getDocs(collection(db, 'vehicles'));
-      if (snap.empty) {
+      if (snap.empty && serverVehicles.length > 0) {
         console.log('[Firebase] Seeding initial data into Firestore...');
         for (const u of serverUsers) {
           await this.setUser(u);

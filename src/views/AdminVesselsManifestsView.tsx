@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ApiService } from '../services/api';
+import { FirestoreService } from '../services/firestoreService';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { MarineVessel, Manifest } from '../types';
@@ -49,6 +50,10 @@ export const AdminVesselsManifestsView: React.FC<AdminVesselsManifestsViewProps>
   const [vesselToDelete, setVesselToDelete] = useState<MarineVessel | null>(null);
   const [isDeletingVessel, setIsDeletingVessel] = useState<boolean>(false);
 
+  // Clear all data state
+  const [showClearModal, setShowClearModal] = useState<boolean>(false);
+  const [isClearing, setIsClearing] = useState<boolean>(false);
+
   // Vessel Edit Modal
   const [isVesselModalOpen, setIsVesselModalOpen] = useState<boolean>(false);
   const [editingVessel, setEditingVessel] = useState<MarineVessel | null>(null);
@@ -81,6 +86,37 @@ export const AdminVesselsManifestsView: React.FC<AdminVesselsManifestsViewProps>
 
   useEffect(() => {
     loadData();
+
+    let unsubVessels: (() => void) | null = null;
+    let unsubManifests: (() => void) | null = null;
+
+    try {
+      unsubVessels = FirestoreService.subscribeVessels((liveVessels) => {
+        if (Array.isArray(liveVessels)) {
+          const cleaned = liveVessels.filter(
+            (v) => v.name.trim().toUpperCase() !== 'E27' && v.id.toLowerCase() !== 'e27'
+          );
+          setVessels(cleaned);
+        }
+      });
+    } catch (e) {
+      console.warn('Vessels subscription notice:', e);
+    }
+
+    try {
+      unsubManifests = FirestoreService.subscribeManifests((liveManifests) => {
+        if (Array.isArray(liveManifests)) {
+          setManifests(liveManifests);
+        }
+      });
+    } catch (e) {
+      console.warn('Manifests subscription notice:', e);
+    }
+
+    return () => {
+      if (unsubVessels) unsubVessels();
+      if (unsubManifests) unsubManifests();
+    };
   }, []);
 
   // Toggle single vessel visibility in operations
@@ -243,6 +279,13 @@ export const AdminVesselsManifestsView: React.FC<AdminVesselsManifestsViewProps>
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowClearModal(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl shadow-xs transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+            <span>Clear All Data</span>
+          </button>
           <button
             onClick={() => onOpenUploadModal && onOpenUploadModal()}
             className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-colors"
@@ -846,6 +889,78 @@ export const AdminVesselsManifestsView: React.FC<AdminVesselsManifestsViewProps>
           </div>
         )}
       </AnimatePresence>
+
+      {/* Clear All Operational Data Confirmation Modal */}
+      {showClearModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-3 bg-rose-100 rounded-xl">
+                <Trash2 className="w-6 h-6 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Wipe & Clear All Data?</h3>
+                <p className="text-xs text-slate-500">Reset system to 0 for a new upload</p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-2">
+              <p className="font-semibold">This will immediately clear:</p>
+              <ul className="list-disc list-inside space-y-1 text-amber-800">
+                <li>All uploaded manifests ({manifests.length}) and rollback history</li>
+                <li>All registered marine vessels ({vessels.length})</li>
+                <li>All associated vehicle records and movement logs</li>
+              </ul>
+              <p className="text-amber-700 italic pt-1 border-t border-amber-200/60">
+                User accounts and system access credentials remain untouched.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowClearModal(false)}
+                disabled={isClearing}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsClearing(true);
+                  try {
+                    await ApiService.clearAllData(user);
+                    showSuccess('All operational data cleared. Ready for fresh manifest upload.');
+                    setShowClearModal(false);
+                    setVessels([]);
+                    setManifests([]);
+                    await loadData();
+                  } catch (err: any) {
+                    showError(err.message || 'Failed to clear data');
+                  } finally {
+                    setIsClearing(false);
+                  }
+                }}
+                disabled={isClearing}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md transition-colors disabled:opacity-50"
+              >
+                {isClearing ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Clearing Data...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Yes, Clear Everything</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Vehicle } from '../types';
 import { ApiService } from '../services/api';
+import { FirestoreService } from '../services/firestoreService';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { StatusBadge } from '../components/StatusBadge';
@@ -39,9 +40,10 @@ export const PortDashboard: React.FC<PortDashboardProps> = ({
   // Quick Release state
   const [selectedToRelease, setSelectedToRelease] = useState<Vehicle | null>(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
+  const isFirstLoad = useRef(true);
 
-  const loadPortData = async () => {
-    setLoading(true);
+  const loadPortData = async (isBackground = false) => {
+    if (!isBackground) setLoading(true);
     try {
       const [portVehs, allVehs] = await Promise.all([
         ApiService.getVehicles({ status: 'AT PORT' }, user),
@@ -57,14 +59,47 @@ export const PortDashboard: React.FC<PortDashboardProps> = ({
 
       setReleasedVehicles(released);
     } catch (err: any) {
-      showError(err.message || 'Failed to load port operational data');
+      if (!isBackground) {
+        showError(err.message || 'Failed to load port operational data');
+      }
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
     }
   };
 
   useEffect(() => {
     loadPortData();
+
+    // 1. Live Firestore subscription
+    let unsubscribeFirestore: (() => void) | null = null;
+    try {
+      unsubscribeFirestore = FirestoreService.subscribeVehicles((vehicles) => {
+        if (vehicles && vehicles.length > 0) {
+          const atPort = vehicles.filter((v) => v.status === 'AT PORT');
+          const released = vehicles
+            .filter((v) => v.releasedAt !== undefined)
+            .sort((a, b) => new Date(b.releasedAt!).getTime() - new Date(a.releasedAt!).getTime());
+          setAtPortVehicles(atPort);
+          setReleasedVehicles(released);
+          if (isFirstLoad.current) {
+            setLoading(false);
+            isFirstLoad.current = false;
+          }
+        }
+      });
+    } catch (e) {
+      console.warn('[PortDashboard] Firestore subscription fallback active', e);
+    }
+
+    // 2. High frequency auto-poll (Every 3.5s)
+    const interval = setInterval(() => {
+      loadPortData(true);
+    }, 3500);
+
+    return () => {
+      if (unsubscribeFirestore) unsubscribeFirestore();
+      clearInterval(interval);
+    };
   }, [user]);
 
   // Unique list of vessels present in port

@@ -86,35 +86,8 @@ class Database {
 
     const now = new Date();
     const todayIso = now.toISOString();
-    const yesterdayIso = new Date(now.getTime() - 24 * 3600 * 1000).toISOString();
-    const twoDaysAgoIso = new Date(now.getTime() - 48 * 3600 * 1000).toISOString();
 
-    // 0. Registered Marine Vessels
-    const vessel1: MarineVessel = {
-      id: 'vsl-mv-trans-carrier',
-      name: 'MV TRANS CARRIER',
-      voyageNumber: 'VOY-2026/08',
-      portOfDischarge: 'Dar es Salaam Port (TPA)',
-      status: 'ACTIVE',
-      isVisibleInOperations: true,
-      createdAt: twoDaysAgoIso,
-      notes: 'Active port discharge and transport operation in progress.',
-    };
-
-    const vessel2: MarineVessel = {
-      id: 'vsl-mv-pacific-glory',
-      name: 'MV PACIFIC GLORY',
-      voyageNumber: 'VOY-2026/04',
-      portOfDischarge: 'Dar es Salaam Port (TPA)',
-      status: 'ACTIVE',
-      isVisibleInOperations: true,
-      createdAt: yesterdayIso,
-      notes: 'Active port transfer operations.',
-    };
-
-    this.vessels = [vessel1, vessel2].filter((v) => v.name.toUpperCase() !== 'E27' && v.id !== 'e27');
-
-    // 1. Initial Users
+    // 1. Primary Administrator
     const adminUser: User = {
       id: 'usr-admin-1',
       name: 'Elisha Samwel',
@@ -122,12 +95,13 @@ class Database {
       username: 'admin',
       role: 'ADMIN',
       status: 'ACTIVE',
-      createdAt: twoDaysAgoIso,
+      createdAt: todayIso,
       lastLogin: todayIso,
     };
     this.users.push(adminUser);
     this.userPasswords.set(adminUser.id, 'admin123');
 
+    // 2. Default Port Release Officer
     const portUser: User = {
       id: 'usr-port-1',
       name: 'John Mrosso (TPA Port)',
@@ -135,12 +109,13 @@ class Database {
       username: 'port_officer',
       role: 'PORT_RELEASE',
       status: 'ACTIVE',
-      createdAt: twoDaysAgoIso,
+      createdAt: todayIso,
       lastLogin: todayIso,
     };
     this.users.push(portUser);
     this.userPasswords.set(portUser.id, 'port123');
 
+    // 3. Default E27 Yard Receiving Officer
     const galcoUser: User = {
       id: 'usr-galco-1',
       name: 'Hamis Bakari (E27 Yard)',
@@ -148,407 +123,11 @@ class Database {
       username: 'galco_receiver',
       role: 'GALCO_RECEIVING',
       status: 'ACTIVE',
-      createdAt: twoDaysAgoIso,
+      createdAt: todayIso,
       lastLogin: todayIso,
     };
     this.users.push(galcoUser);
     this.userPasswords.set(galcoUser.id, 'yard123');
-
-    // 2. Demo Manifest
-    // 2. Demo Manifests (Separate for different marine vessels)
-    const manifest1: Manifest = {
-      id: 'mnf-vessel-001',
-      fileName: 'TPA_DAR_MANIFEST_MV_TRANS_CARRIER.xlsx',
-      uploadedByUserId: adminUser.id,
-      uploadedByName: adminUser.name,
-      uploadedAt: twoDaysAgoIso,
-      vesselName: 'MV TRANS CARRIER',
-      voyageNumber: 'VOY-2026/08',
-      portOfDischarge: 'Dar es Salaam Port (TPA)',
-      totalRecords: 4,
-      successfulRecords: 4,
-      duplicateRecords: 0,
-      invalidRecords: 0,
-    };
-    const manifest2: Manifest = {
-      id: 'mnf-vessel-002',
-      fileName: 'TPA_DAR_MANIFEST_MV_PACIFIC_GLORY.xlsx',
-      uploadedByUserId: adminUser.id,
-      uploadedByName: adminUser.name,
-      uploadedAt: yesterdayIso,
-      vesselName: 'MV PACIFIC GLORY',
-      voyageNumber: 'VOY-2026/04',
-      portOfDischarge: 'Dar es Salaam Port (TPA)',
-      totalRecords: 4,
-      successfulRecords: 4,
-      duplicateRecords: 0,
-      invalidRecords: 0,
-    };
-    this.manifests.push(manifest1, manifest2);
-
-    // 3. Demo Vehicles - Vessel 1: MV TRANS CARRIER
-    // Vehicle 1: KEEFW108999 (MAZDA CX) -> AT PORT (MV TRANS CARRIER)
-    const v1: Vehicle = {
-      id: 'veh-1',
-      serialNumber: 1,
-      chassisNumber: 'KEEFW108999',
-      description: 'MAZDA CX-5 2.0L SKYACTIV 2018',
-      status: 'AT PORT',
-      vesselName: 'MV TRANS CARRIER',
-      voyageNumber: 'VOY-2026/08',
-      portOfDischarge: 'Dar es Salaam Port (TPA)',
-      createdAt: twoDaysAgoIso,
-      updatedAt: twoDaysAgoIso,
-      manifestId: manifest1.id,
-    };
-    this.vehicles.push(v1);
-    this.history.push({
-      id: 'hist-1-1',
-      vehicleId: v1.id,
-      action: 'Manifest Uploaded',
-      previousStatus: 'NONE',
-      newStatus: 'AT PORT',
-      userId: adminUser.id,
-      userName: adminUser.name,
-      userRole: adminUser.role,
-      vesselName: 'MV TRANS CARRIER',
-      timestamp: twoDaysAgoIso,
-      notes: 'Initial batch upload from manifest: MV TRANS CARRIER (VOY-2026/08)',
-    });
-
-    // Vehicle 2: JH4TB2H26CC000123 (HONDA CR-V) -> ON TRANSIT (MV TRANS CARRIER)
-    const v2: Vehicle = {
-      id: 'veh-2',
-      serialNumber: 2,
-      chassisNumber: 'JH4TB2H26CC000123',
-      description: 'HONDA CR-V 4WD PEARL WHITE 2019',
-      status: 'ON TRANSIT',
-      vesselName: 'MV TRANS CARRIER',
-      voyageNumber: 'VOY-2026/08',
-      portOfDischarge: 'Dar es Salaam Port (TPA)',
-      createdAt: twoDaysAgoIso,
-      updatedAt: yesterdayIso,
-      manifestId: manifest1.id,
-      releasedByUserId: portUser.id,
-      releasedByName: portUser.name,
-      releasedAt: yesterdayIso,
-    };
-    this.vehicles.push(v2);
-    this.history.push({
-      id: 'hist-2-1',
-      vehicleId: v2.id,
-      action: 'Manifest Uploaded',
-      previousStatus: 'NONE',
-      newStatus: 'AT PORT',
-      userId: adminUser.id,
-      userName: adminUser.name,
-      userRole: adminUser.role,
-      vesselName: 'MV TRANS CARRIER',
-      timestamp: twoDaysAgoIso,
-      notes: 'Imported via manifest file for MV TRANS CARRIER',
-    });
-    this.history.push({
-      id: 'hist-2-2',
-      vehicleId: v2.id,
-      action: 'Released from Port',
-      previousStatus: 'AT PORT',
-      newStatus: 'ON TRANSIT',
-      userId: portUser.id,
-      userName: portUser.name,
-      userRole: portUser.role,
-      vesselName: 'MV TRANS CARRIER',
-      timestamp: yesterdayIso,
-      notes: 'Physical verification passed. Carrier dispatched from Port berth to E27 yard.',
-    });
-
-    // Vehicle 3: KMHFG4JG5GA123456 (HYUNDAI) -> RECEIVED AT GALCO (MV TRANS CARRIER)
-    const v3: Vehicle = {
-      id: 'veh-3',
-      serialNumber: 3,
-      chassisNumber: 'KMHFG4JG5GA123456',
-      description: 'HYUNDAI TUCSON 2.0 CRDI DIESEL 2020',
-      status: 'RECEIVED AT GALCO',
-      vesselName: 'MV TRANS CARRIER',
-      voyageNumber: 'VOY-2026/08',
-      portOfDischarge: 'Dar es Salaam Port (TPA)',
-      createdAt: twoDaysAgoIso,
-      updatedAt: todayIso,
-      manifestId: manifest1.id,
-      releasedByUserId: portUser.id,
-      releasedByName: portUser.name,
-      releasedAt: yesterdayIso,
-      receivedByUserId: galcoUser.id,
-      receivedByName: galcoUser.name,
-      receivedAt: todayIso,
-    };
-    this.vehicles.push(v3);
-    this.history.push({
-      id: 'hist-3-1',
-      vehicleId: v3.id,
-      action: 'Manifest Uploaded',
-      previousStatus: 'NONE',
-      newStatus: 'AT PORT',
-      userId: adminUser.id,
-      userName: adminUser.name,
-      userRole: adminUser.role,
-      vesselName: 'MV TRANS CARRIER',
-      timestamp: twoDaysAgoIso,
-    });
-    this.history.push({
-      id: 'hist-3-2',
-      vehicleId: v3.id,
-      action: 'Released from Port',
-      previousStatus: 'AT PORT',
-      newStatus: 'ON TRANSIT',
-      userId: portUser.id,
-      userName: portUser.name,
-      userRole: portUser.role,
-      vesselName: 'MV TRANS CARRIER',
-      timestamp: yesterdayIso,
-    });
-    this.history.push({
-      id: 'hist-3-3',
-      vehicleId: v3.id,
-      action: 'Received at E27',
-      previousStatus: 'ON TRANSIT',
-      newStatus: 'RECEIVED AT GALCO',
-      userId: galcoUser.id,
-      userName: galcoUser.name,
-      userRole: galcoUser.role,
-      vesselName: 'MV TRANS CARRIER',
-      timestamp: todayIso,
-      notes: 'Vehicle from MV TRANS CARRIER received and parked at Bay A-14. Physical inspection complete.',
-    });
-
-    // Vehicle 4: NZE141-9081234 (TOYOTA COROLLA FIELDER) -> AT PORT (MV TRANS CARRIER)
-    const v4: Vehicle = {
-      id: 'veh-4',
-      serialNumber: 4,
-      chassisNumber: 'NZE141-9081234',
-      description: 'TOYOTA COROLLA FIELDER 1.5X SILVER 2017',
-      status: 'AT PORT',
-      vesselName: 'MV TRANS CARRIER',
-      voyageNumber: 'VOY-2026/08',
-      portOfDischarge: 'Dar es Salaam Port (TPA)',
-      createdAt: twoDaysAgoIso,
-      updatedAt: twoDaysAgoIso,
-      manifestId: manifest1.id,
-    };
-    this.vehicles.push(v4);
-    this.history.push({
-      id: 'hist-4-1',
-      vehicleId: v4.id,
-      action: 'Manifest Uploaded',
-      previousStatus: 'NONE',
-      newStatus: 'AT PORT',
-      userId: adminUser.id,
-      userName: adminUser.name,
-      userRole: adminUser.role,
-      vesselName: 'MV TRANS CARRIER',
-      timestamp: twoDaysAgoIso,
-    });
-
-    // Demo Vehicles - Vessel 2: MV PACIFIC GLORY
-    // Vehicle 5: WBA3A5C55FP778899 (BMW 320I) -> ON TRANSIT (MV PACIFIC GLORY)
-    const v5: Vehicle = {
-      id: 'veh-5',
-      serialNumber: 5,
-      chassisNumber: 'WBA3A5C55FP778899',
-      description: 'BMW 320I M-SPORT BLACK SAPPHIRE 2021',
-      status: 'ON TRANSIT',
-      vesselName: 'MV PACIFIC GLORY',
-      voyageNumber: 'VOY-2026/04',
-      portOfDischarge: 'Dar es Salaam Port (TPA)',
-      createdAt: yesterdayIso,
-      updatedAt: todayIso,
-      manifestId: manifest2.id,
-      releasedByUserId: portUser.id,
-      releasedByName: portUser.name,
-      releasedAt: todayIso,
-    };
-    this.vehicles.push(v5);
-    this.history.push({
-      id: 'hist-5-1',
-      vehicleId: v5.id,
-      action: 'Manifest Uploaded',
-      previousStatus: 'NONE',
-      newStatus: 'AT PORT',
-      userId: adminUser.id,
-      userName: adminUser.name,
-      userRole: adminUser.role,
-      vesselName: 'MV PACIFIC GLORY',
-      timestamp: yesterdayIso,
-    });
-    this.history.push({
-      id: 'hist-5-2',
-      vehicleId: v5.id,
-      action: 'Released from Port',
-      previousStatus: 'AT PORT',
-      newStatus: 'ON TRANSIT',
-      userId: portUser.id,
-      userName: portUser.name,
-      userRole: portUser.role,
-      vesselName: 'MV PACIFIC GLORY',
-      timestamp: todayIso,
-      notes: 'Car from MV PACIFIC GLORY released and escorted to E27 yard.',
-    });
-
-    // Vehicle 6: VNKKL832960554433 (MERCEDES-BENZ C200) -> RECEIVED AT GALCO (MV PACIFIC GLORY)
-    const v6: Vehicle = {
-      id: 'veh-6',
-      serialNumber: 6,
-      chassisNumber: 'VNKKL832960554433',
-      description: 'MERCEDES-BENZ C200 AVANTGARDE OBSIDIAN BLACK 2020',
-      status: 'RECEIVED AT GALCO',
-      vesselName: 'MV PACIFIC GLORY',
-      voyageNumber: 'VOY-2026/04',
-      portOfDischarge: 'Dar es Salaam Port (TPA)',
-      createdAt: yesterdayIso,
-      updatedAt: todayIso,
-      manifestId: manifest2.id,
-      releasedByUserId: portUser.id,
-      releasedByName: portUser.name,
-      releasedAt: yesterdayIso,
-      receivedByUserId: galcoUser.id,
-      receivedByName: galcoUser.name,
-      receivedAt: todayIso,
-    };
-    this.vehicles.push(v6);
-    this.history.push({
-      id: 'hist-6-1',
-      vehicleId: v6.id,
-      action: 'Manifest Uploaded',
-      previousStatus: 'NONE',
-      newStatus: 'AT PORT',
-      userId: adminUser.id,
-      userName: adminUser.name,
-      userRole: adminUser.role,
-      vesselName: 'MV PACIFIC GLORY',
-      timestamp: yesterdayIso,
-    });
-    this.history.push({
-      id: 'hist-6-2',
-      vehicleId: v6.id,
-      action: 'Released from Port',
-      previousStatus: 'AT PORT',
-      newStatus: 'ON TRANSIT',
-      userId: portUser.id,
-      userName: portUser.name,
-      userRole: portUser.role,
-      vesselName: 'MV PACIFIC GLORY',
-      timestamp: yesterdayIso,
-    });
-    this.history.push({
-      id: 'hist-6-3',
-      vehicleId: v6.id,
-      action: 'Received at E27',
-      previousStatus: 'ON TRANSIT',
-      newStatus: 'RECEIVED AT GALCO',
-      userId: galcoUser.id,
-      userName: galcoUser.name,
-      userRole: galcoUser.role,
-      vesselName: 'MV PACIFIC GLORY',
-      timestamp: todayIso,
-      notes: 'Car from MV PACIFIC GLORY cleared gate entry checklist and assigned to Bay B-08.',
-    });
-
-    // Vehicle 7: JTMBA31V105234987 (TOYOTA LAND CRUISER PRADO) -> AT PORT (MV PACIFIC GLORY)
-    const v7: Vehicle = {
-      id: 'veh-7',
-      serialNumber: 7,
-      chassisNumber: 'JTMBA31V105234987',
-      description: 'TOYOTA LAND CRUISER PRADO TX-L PEARL 2022',
-      status: 'AT PORT',
-      vesselName: 'MV PACIFIC GLORY',
-      voyageNumber: 'VOY-2026/04',
-      portOfDischarge: 'Dar es Salaam Port (TPA)',
-      createdAt: yesterdayIso,
-      updatedAt: yesterdayIso,
-      manifestId: manifest2.id,
-    };
-    this.vehicles.push(v7);
-    this.history.push({
-      id: 'hist-7-1',
-      vehicleId: v7.id,
-      action: 'Manifest Uploaded',
-      previousStatus: 'NONE',
-      newStatus: 'AT PORT',
-      userId: adminUser.id,
-      userName: adminUser.name,
-      userRole: adminUser.role,
-      vesselName: 'MV PACIFIC GLORY',
-      timestamp: yesterdayIso,
-    });
-
-    // Vehicle 8: SALWR2V45KA998877 (RANGE ROVER SPORT) -> AT PORT (MV PACIFIC GLORY)
-    const v8: Vehicle = {
-      id: 'veh-8',
-      serialNumber: 8,
-      chassisNumber: 'SALWR2V45KA998877',
-      description: 'RANGE ROVER SPORT HSE DYNAMIC SANTORINI BLACK 2021',
-      status: 'AT PORT',
-      vesselName: 'MV PACIFIC GLORY',
-      voyageNumber: 'VOY-2026/04',
-      portOfDischarge: 'Dar es Salaam Port (TPA)',
-      createdAt: yesterdayIso,
-      updatedAt: yesterdayIso,
-      manifestId: manifest2.id,
-    };
-    this.vehicles.push(v8);
-    this.history.push({
-      id: 'hist-8-1',
-      vehicleId: v8.id,
-      action: 'Manifest Uploaded',
-      previousStatus: 'NONE',
-      newStatus: 'AT PORT',
-      userId: adminUser.id,
-      userName: adminUser.name,
-      userRole: adminUser.role,
-      vesselName: 'MV PACIFIC GLORY',
-      timestamp: yesterdayIso,
-    });
-
-    // Initial Audit Logs
-    this.auditLogs.push({
-      id: 'aud-1',
-      action: 'System Initialized',
-      details: 'E27 VTMS Vehicle Transfer Management System initialized with base manifest.',
-      userId: adminUser.id,
-      userName: adminUser.name,
-      userRole: adminUser.role,
-      timestamp: twoDaysAgoIso,
-    });
-    this.auditLogs.push({
-      id: 'aud-2',
-      action: 'Manifest Uploaded',
-      details: `Imported 4 vehicles from ${manifest1.fileName} for ${manifest1.vesselName}`,
-      userId: adminUser.id,
-      userName: adminUser.name,
-      userRole: adminUser.role,
-      timestamp: twoDaysAgoIso,
-    });
-    this.auditLogs.push({
-      id: 'aud-3',
-      action: 'Vehicle Released from Port',
-      details: `Vehicle ${v2.chassisNumber} (${v2.description}) released from Dar es Salaam Port (TPA) to ON TRANSIT`,
-      vehicleId: v2.id,
-      chassisNumber: v2.chassisNumber,
-      userId: portUser.id,
-      userName: portUser.name,
-      userRole: portUser.role,
-      timestamp: yesterdayIso,
-    });
-    this.auditLogs.push({
-      id: 'aud-4',
-      action: 'Vehicle Received at E27',
-      details: `Vehicle ${v3.chassisNumber} (${v3.description}) received at E27 Yard`,
-      vehicleId: v3.id,
-      chassisNumber: v3.chassisNumber,
-      userId: galcoUser.id,
-      userName: galcoUser.name,
-      userRole: galcoUser.role,
-      timestamp: todayIso,
-    });
 
     this.saveToFile();
   }
@@ -1290,7 +869,7 @@ class Database {
     validRows: { serialNumber: string | number; chassisNumber: string; description: string; vesselName?: string; voyageNumber?: string }[],
     actor: User,
     vesselMeta?: { vesselName?: string; voyageNumber?: string; portOfDischarge?: string; isVisibleInOperations?: boolean }
-  ): { manifest: Manifest; vessel: MarineVessel; importedCount: number } {
+  ): { manifest: Manifest; vessel: MarineVessel; importedCount: number; createdVehicles: Vehicle[] } {
     const now = new Date().toISOString();
     const manifestId = `mnf-${Date.now()}`;
 
@@ -1300,6 +879,7 @@ class Database {
     const initialVisibility = vesselMeta?.isVisibleInOperations !== undefined ? vesselMeta.isVisibleInOperations : true;
 
     let importedCount = 0;
+    const newVehicles: Vehicle[] = [];
     for (const r of validRows) {
       const cleanChassis = r.chassisNumber.trim().toUpperCase();
       if (!cleanChassis || this.getVehicleByChassis(cleanChassis)) continue;
@@ -1322,6 +902,7 @@ class Database {
       };
 
       this.vehicles.push(vehicle);
+      newVehicles.push(vehicle);
       this.history.push({
         id: `hist-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
         vehicleId: vehicle.id,
@@ -1390,7 +971,9 @@ class Database {
       userRole: actor.role,
     });
 
-    return { manifest: manifestRecord, vessel: registeredVessel, importedCount };
+    this.saveToFile();
+
+    return { manifest: manifestRecord, vessel: registeredVessel, importedCount, createdVehicles: newVehicles };
   }
 
   // Admin Delete Manifest and Rollback Associated Vehicles
@@ -1695,6 +1278,31 @@ class Database {
       activityByDay,
       statusDistribution,
     };
+  }
+
+  public clearAllOperationalData(actor: User): { success: boolean; cleared: { vehicles: number; manifests: number; history: number; vessels: number } } {
+    const counts = {
+      vehicles: this.vehicles.length,
+      manifests: this.manifests.length,
+      history: this.history.length,
+      vessels: this.vessels.length,
+    };
+    this.vehicles = [];
+    this.history = [];
+    this.manifests = [];
+    this.vessels = [];
+    this.auditLogs = [];
+
+    this.logAudit({
+      action: 'Operational Data Purged & Cleared',
+      details: `Admin ${actor.name} cleared all vehicles, manifests, vessels, and tracking history for new manifest upload.`,
+      userId: actor.id,
+      userName: actor.name,
+      userRole: actor.role,
+    });
+
+    this.saveToFile();
+    return { success: true, cleared: counts };
   }
 }
 

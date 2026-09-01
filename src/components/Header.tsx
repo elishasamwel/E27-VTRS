@@ -6,32 +6,16 @@ import {
   Anchor,
   LogOut,
   Menu,
-  RotateCcw,
   Warehouse,
 } from 'lucide-react';
-import { ApiService } from '../services/api';
-import { useNotification } from '../context/NotificationContext';
 
 interface HeaderProps {
   onToggleMobileMenu: () => void;
   onRefreshData?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu, onRefreshData }) => {
+export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu }) => {
   const { user, logout } = useAuth();
-  const { showSuccess, showError } = useNotification();
-
-  const handleResetData = async () => {
-    if (window.confirm('Reset database to default initial demo manifest and vehicles?')) {
-      try {
-        await ApiService.resetDatabase(user);
-        showSuccess('Database reset to initial demo dataset successfully.');
-        if (onRefreshData) onRefreshData();
-      } catch (err: any) {
-        showError('Failed to reset database');
-      }
-    }
-  };
 
   const getRoleBadge = (role?: UserRole) => {
     switch (role) {
@@ -68,26 +52,27 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu, onRefreshDat
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Brand Logo & Title */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={onToggleMobileMenu}
               className="lg:hidden p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800"
+              aria-label="Toggle Navigation Menu"
             >
               <Menu className="w-6 h-6" />
             </button>
 
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-700 via-blue-600 to-cyan-500 flex items-center justify-center text-white font-black text-sm shadow-md ring-2 ring-white/10 tracking-wider">
+            <div className="flex items-center gap-2.5 sm:gap-3">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-blue-700 via-blue-600 to-cyan-500 flex items-center justify-center text-white font-black text-xs sm:text-sm shadow-md ring-2 ring-white/10 tracking-wider flex-shrink-0">
                 E27
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="font-extrabold tracking-tight text-white text-base sm:text-lg">
+                  <span className="font-extrabold tracking-tight text-white text-sm sm:text-lg whitespace-nowrap">
                     E27 <span className="text-blue-400">ICDV</span> <span className="text-blue-300 font-bold">VTMS</span>
                   </span>
                   <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-950/80 text-emerald-300 border border-emerald-500/30">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    Firebase Live
+                    Live Sync
                   </span>
                 </div>
               </div>
@@ -100,15 +85,6 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu, onRefreshDat
             <div className="flex items-center gap-1.5">
               {getRoleBadge(user?.role)}
             </div>
-
-            {/* Reset Demo Data Button */}
-            <button
-              onClick={handleResetData}
-              title="Reset initial demo data"
-              className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
-            >
-              <RotateCcw className="w-4 h-4" />
-            </button>
 
             {/* User Profile & Logout */}
             <div className="flex items-center gap-2 pl-2 border-l border-slate-800">

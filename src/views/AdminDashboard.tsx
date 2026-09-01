@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { DashboardStats, Vehicle, VehicleStatus } from '../types';
 import { ApiService } from '../services/api';
+import { FirestoreService } from '../services/firestoreService';
 import { useAuth } from '../context/AuthContext';
+import { useNotification } from '../context/NotificationContext';
 import { StatusBadge } from '../components/StatusBadge';
 import { ChassisSearchCard } from '../components/ChassisSearchCard';
 import {
@@ -17,6 +19,8 @@ import {
   Clock,
   ChevronRight,
   RefreshCw,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -44,12 +48,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onViewVehicle,
 }) => {
   const { user } = useAuth();
+  const { showSuccess, showError } = useNotification();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentVehicles, setRecentVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+  const isFirstLoad = useRef(true);
 
-  const loadDashboardData = async () => {
-    setLoading(true);
+  const loadDashboardData = async (isBackground = false) => {
+    if (!isBackground) setLoading(true);
     try {
       const [fetchedStats, fetchedVehicles] = await Promise.all([
         ApiService.getStats(undefined, user),
@@ -63,12 +71,108 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     } catch (err) {
       console.error('Failed to load admin stats', err);
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
+    }
+  };
+
+  const handleClearAllData = async () => {
+    setIsClearing(true);
+    try {
+      await ApiService.clearAllData(user);
+      showSuccess('All operational data cleared successfully. System is now completely clean and ready for new manifest uploads.');
+      setShowClearModal(false);
+      setStats({
+        totalVehicles: 0,
+        atPortCount: 0,
+        onTransitCount: 0,
+        receivedGalcoCount: 0,
+        releasedTodayCount: 0,
+        receivedTodayCount: 0,
+        totalManifests: 0,
+        activeUsersCount: stats?.activeUsersCount || 0,
+        vesselsCount: 0,
+        vesselStats: [],
+        activityByDay: [],
+        statusDistribution: [
+          { name: 'AT PORT', value: 0, color: '#f59e0b' },
+          { name: 'ON TRANSIT', value: 0, color: '#f97316' },
+          { name: 'RECEIVED AT GALCO', value: 0, color: '#10b981' },
+        ],
+      });
+      setRecentVehicles([]);
+      await loadDashboardData();
+    } catch (err: any) {
+      showError(err.message || 'Failed to clear operational data.');
+    } finally {
+      setIsClearing(false);
     }
   };
 
   useEffect(() => {
     loadDashboardData();
+
+    let unsubscribeFirestore: (() => void) | null = null;
+    try {
+      unsubscribeFirestore = FirestoreService.subscribeVehicles((vehicles) => {
+        if (vehicles) {
+          const total = vehicles.length;
+          const atPort = vehicles.filter((v) => v.status === 'AT PORT').length;
+          const onTransit = vehicles.filter((v) => v.status === 'ON TRANSIT').length;
+          const received = vehicles.filter((v) => v.status === 'RECEIVED AT GALCO').length;
+
+          setStats((prev) => {
+            const todayStr = new Date().toISOString().split('T')[0];
+            const releasedToday = vehicles.filter(
+              (v) => v.releasedAt && v.releasedAt.startsWith(todayStr)
+            ).length;
+            const receivedToday = vehicles.filter(
+              (v) => v.receivedAt && v.receivedAt.startsWith(todayStr)
+            ).length;
+
+            return {
+              totalVehicles: total,
+              atPortCount: atPort,
+              onTransitCount: onTransit,
+              receivedGalcoCount: received,
+              releasedTodayCount: releasedToday || prev?.releasedTodayCount || 0,
+              receivedTodayCount: receivedToday || prev?.receivedTodayCount || 0,
+              totalManifests: prev?.totalManifests || 0,
+              activeUsersCount: prev?.activeUsersCount || 0,
+              vesselsCount: prev?.vesselsCount || 0,
+              vesselStats: prev?.vesselStats || [],
+              activityByDay: prev?.activityByDay || [],
+              statusDistribution: [
+                { name: 'AT PORT', value: atPort, color: '#f59e0b' },
+                { name: 'ON TRANSIT', value: onTransit, color: '#f97316' },
+                { name: 'RECEIVED AT GALCO', value: received, color: '#10b981' },
+              ],
+            };
+          });
+
+          setRecentVehicles(
+            [...vehicles]
+              .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime())
+              .slice(0, 6)
+          );
+
+          if (isFirstLoad.current) {
+            setLoading(false);
+            isFirstLoad.current = false;
+          }
+        }
+      });
+    } catch (e) {
+      console.warn('[AdminDashboard] Firestore subscription fallback active', e);
+    }
+
+    const interval = setInterval(() => {
+      loadDashboardData(true);
+    }, 4000);
+
+    return () => {
+      if (unsubscribeFirestore) unsubscribeFirestore();
+      clearInterval(interval);
+    };
   }, [user]);
 
   const COLORS = ['#f59e0b', '#f97316', '#10b981'];
@@ -86,6 +190,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </p>
         </div>
         <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setShowClearModal(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs sm:text-sm font-bold shadow-xs transition-colors"
+            title="Clear All Data to upload fresh manifests"
+          >
+            <Trash2 className="w-4 h-4 text-rose-600" />
+            <span>Clear All Data</span>
+          </button>
           <button
             onClick={loadDashboardData}
             className="p-2.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl shadow-xs transition-colors"
@@ -219,7 +331,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
 
           <div className="h-64 my-2">
-            {stats && stats.totalVehicles > 0 ? (
+            {stats && stats.totalVehicles > 0 && Array.isArray(stats.statusDistribution) && stats.statusDistribution.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -231,8 +343,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     paddingAngle={4}
                     dataKey="value"
                   >
-                    {stats.statusDistribution.map((entry, index) => (
-                      <Cell key={`pie-cell-${entry.name || ''}-${index}`} fill={COLORS[index % COLORS.length]} />
+                    {(stats.statusDistribution || []).map((entry, index) => (
+                      <Cell key={`pie-cell-${entry?.name || ''}-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
                   <RechartsTooltip
@@ -409,6 +521,64 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </table>
         </div>
       </div>
+
+      {/* Clear All Operational Data Confirmation Modal */}
+      {showClearModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-3 bg-rose-100 rounded-xl">
+                <AlertTriangle className="w-6 h-6 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Clear & Wipe All Data?</h3>
+                <p className="text-xs text-slate-500">Prepare system for fresh manifest upload</p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-2">
+              <p className="font-semibold">This action will immediately delete:</p>
+              <ul className="list-disc list-inside space-y-1 text-amber-800">
+                <li>All vehicle records and tracking histories</li>
+                <li>All uploaded manifests and marine vessels</li>
+                <li>All activity logs from previous sessions</li>
+              </ul>
+              <p className="text-amber-700 italic pt-1 border-t border-amber-200/60">
+                Admin, Port Officer, and Galco Receiving accounts will remain active and untouched.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowClearModal(false)}
+                disabled={isClearing}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleClearAllData}
+                disabled={isClearing}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md transition-colors disabled:opacity-50"
+              >
+                {isClearing ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Clearing Database...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Yes, Delete & Clear All Data</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

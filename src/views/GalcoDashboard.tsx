@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Vehicle } from '../types';
 import { ApiService } from '../services/api';
+import { FirestoreService } from '../services/firestoreService';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { StatusBadge } from '../components/StatusBadge';
@@ -37,9 +38,10 @@ export const GalcoDashboard: React.FC<GalcoDashboardProps> = ({
   // Quick Receive Modal State
   const [selectedToReceive, setSelectedToReceive] = useState<Vehicle | null>(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
+  const isFirstLoad = useRef(true);
 
-  const loadGalcoData = async () => {
-    setLoading(true);
+  const loadGalcoData = async (isBackground = false) => {
+    if (!isBackground) setLoading(true);
     try {
       const [transitVehs, receivedVehs] = await Promise.all([
         ApiService.getVehicles({ status: 'ON TRANSIT' }, user),
@@ -54,14 +56,51 @@ export const GalcoDashboard: React.FC<GalcoDashboardProps> = ({
       );
       setReceivedVehicles(sortedReceived);
     } catch (err: any) {
-      showError(err.message || 'Failed to load yard receiving data');
+      if (!isBackground) {
+        showError(err.message || 'Failed to load yard receiving data');
+      }
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
     }
   };
 
   useEffect(() => {
     loadGalcoData();
+
+    // 1. Real-time Firestore Live Subscription
+    let unsubscribeFirestore: (() => void) | null = null;
+    try {
+      unsubscribeFirestore = FirestoreService.subscribeVehicles((vehicles) => {
+        if (vehicles && vehicles.length > 0) {
+          const transit = vehicles.filter((v) => v.status === 'ON TRANSIT');
+          const received = vehicles
+            .filter((v) => v.status === 'RECEIVED AT GALCO')
+            .sort(
+              (a, b) =>
+                new Date(b.receivedAt || b.updatedAt).getTime() -
+                new Date(a.receivedAt || a.updatedAt).getTime()
+            );
+          setOnTransitVehicles(transit);
+          setReceivedVehicles(received);
+          if (isFirstLoad.current) {
+            setLoading(false);
+            isFirstLoad.current = false;
+          }
+        }
+      });
+    } catch (e) {
+      console.warn('[GalcoDashboard] Firestore subscription fallback active', e);
+    }
+
+    // 2. High-Frequency Real-time Auto-detection Polling (Every 3.5s)
+    const interval = setInterval(() => {
+      loadGalcoData(true);
+    }, 3500);
+
+    return () => {
+      if (unsubscribeFirestore) unsubscribeFirestore();
+      clearInterval(interval);
+    };
   }, [user]);
 
   // Unique vessels

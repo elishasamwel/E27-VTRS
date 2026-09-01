@@ -303,6 +303,48 @@ export const LoginView: React.FC = () => {
                 )}
               </button>
 
+              {/* Quick Role Fill Access */}
+              <div className="pt-2">
+                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 text-center">
+                  Quick Role Logins:
+                </div>
+                <div className="grid grid-cols-3 gap-1.5 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUsername('admin');
+                      setPassword('admin123');
+                    }}
+                    className="p-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-300 font-semibold text-center transition-colors"
+                  >
+                    <Shield className="w-3.5 h-3.5 mx-auto mb-1 text-blue-400" />
+                    Admin
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUsername('port_officer');
+                      setPassword('port123');
+                    }}
+                    className="p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 font-semibold text-center transition-colors"
+                  >
+                    <Anchor className="w-3.5 h-3.5 mx-auto mb-1 text-amber-400" />
+                    Port Officer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUsername('galco_receiver');
+                      setPassword('yard123');
+                    }}
+                    className="p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 font-semibold text-center transition-colors"
+                  >
+                    <Warehouse className="w-3.5 h-3.5 mx-auto mb-1 text-emerald-400" />
+                    Yard Receiver
+                  </button>
+                </div>
+              </div>
+
               {/* Google Authentication via Firebase */}
               <div className="relative my-3">
                 <div className="absolute inset-0 flex items-center">

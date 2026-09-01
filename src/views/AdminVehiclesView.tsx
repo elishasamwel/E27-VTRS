@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Vehicle, VehicleStatus } from '../types';
 import { ApiService } from '../services/api';
+import { FirestoreService } from '../services/firestoreService';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { StatusBadge } from '../components/StatusBadge';
@@ -22,6 +23,7 @@ import {
   Ship,
   Anchor,
   RotateCcw,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface AdminVehiclesViewProps {
@@ -62,6 +64,8 @@ export const AdminVehiclesView: React.FC<AdminVehiclesViewProps> = ({
 
   // Manual Add Vehicle Modal
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const [newSerial, setNewSerial] = useState('');
   const [newChassis, setNewChassis] = useState('');
   const [newDesc, setNewDesc] = useState('');
@@ -110,7 +114,39 @@ export const AdminVehiclesView: React.FC<AdminVehiclesViewProps> = ({
 
   useEffect(() => {
     loadVehicles();
-  }, [statusFilter, vesselFilter, startDate, endDate, user]);
+
+    // Live real-time Firestore sync
+    let unsubscribe: (() => void) | null = null;
+    try {
+      unsubscribe = FirestoreService.subscribeVehicles((liveVehicles) => {
+        if (Array.isArray(liveVehicles)) {
+          let filtered = liveVehicles;
+          if (statusFilter !== 'ALL') {
+            filtered = filtered.filter((v) => v.status === statusFilter);
+          }
+          if (vesselFilter !== 'ALL') {
+            filtered = filtered.filter((v) => v.vesselName?.toUpperCase() === vesselFilter.toUpperCase());
+          }
+          if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase();
+            filtered = filtered.filter(
+              (v) =>
+                v.chassisNumber.toLowerCase().includes(q) ||
+                v.description.toLowerCase().includes(q) ||
+                (v.vesselName && v.vesselName.toLowerCase().includes(q))
+            );
+          }
+          setVehicles(filtered);
+        }
+      });
+    } catch (e) {
+      console.warn('Firestore subscription notice:', e);
+    }
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [statusFilter, vesselFilter, startDate, endDate, user, searchQuery]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -310,6 +346,14 @@ export const AdminVehiclesView: React.FC<AdminVehiclesViewProps> = ({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setShowClearModal(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold shadow-xs transition-colors"
+            title="Clear All Data"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+            <span>Clear All Data</span>
+          </button>
           <button
             onClick={loadVehicles}
             className="p-2.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl shadow-xs"
@@ -760,6 +804,76 @@ export const AdminVehiclesView: React.FC<AdminVehiclesViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Clear All Operational Data Confirmation Modal */}
+      {showClearModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-3 bg-rose-100 rounded-xl">
+                <AlertTriangle className="w-6 h-6 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Clear All Vehicle Records?</h3>
+                <p className="text-xs text-slate-500">Wipe previous counts & start fresh</p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-2">
+              <p className="font-semibold">This will immediately delete all existing vehicle records:</p>
+              <ul className="list-disc list-inside space-y-1 text-amber-800">
+                <li>All vehicles ({vehicles.length} units) and movement history</li>
+                <li>All manifests, vessel entries, and tracking logs</li>
+              </ul>
+              <p className="text-amber-700 italic pt-1 border-t border-amber-200/60">
+                You can then upload your new manifest file cleanly.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowClearModal(false)}
+                disabled={isClearing}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsClearing(true);
+                  try {
+                    await ApiService.clearAllData(user);
+                    showSuccess('All vehicles & manifests deleted. Ready for new upload.');
+                    setShowClearModal(false);
+                    setVehicles([]);
+                    await loadVehicles();
+                  } catch (err: any) {
+                    showError(err.message || 'Failed to clear data');
+                  } finally {
+                    setIsClearing(false);
+                  }
+                }}
+                disabled={isClearing}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md transition-colors disabled:opacity-50"
+              >
+                {isClearing ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Clearing Records...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Yes, Clear All Data</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

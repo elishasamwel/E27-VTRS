@@ -397,9 +397,39 @@ apiRouter.get('/stats', (req: Request, res: Response) => {
   res.json(db.getDashboardStats(vesselName as string));
 });
 
-// 7. Reset to demo data
+// 7. Clear all operational data (Admin only)
+apiRouter.post('/admin/clear-data', (req: Request, res: Response) => {
+  const actor = getActor(req);
+  if (actor.role !== 'ADMIN') {
+    return res.status(403).json({ error: 'Only Admins can clear all operational data.' });
+  }
+
+  const result = db.clearAllOperationalData(actor);
+  res.json({
+    success: true,
+    message: 'All vehicles, manifests, vessels, and tracking logs cleared successfully.',
+    cleared: result.cleared,
+  });
+});
+
+apiRouter.post('/vehicles/clear-all', (req: Request, res: Response) => {
+  const actor = getActor(req);
+  if (actor.role !== 'ADMIN') {
+    return res.status(403).json({ error: 'Only Admins can clear all vehicles.' });
+  }
+
+  const result = db.clearAllOperationalData(actor);
+  res.json({
+    success: true,
+    message: 'All vehicles cleared successfully.',
+    cleared: result.cleared,
+  });
+});
+
+// 8. Reset to demo data
 apiRouter.post('/seed/reset', (req: Request, res: Response) => {
   const actor = getActor(req);
   db.seedInitialData();
   res.json({ success: true, message: 'Database reset to initial demo state.' });
 });
+

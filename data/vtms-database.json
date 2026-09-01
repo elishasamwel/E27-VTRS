@@ -1,0 +1,44 @@
+{
+  "users": [
+    {
+      "id": "usr-admin-1",
+      "name": "Elisha Samwel",
+      "email": "admin@galco.co.tz",
+      "username": "admin",
+      "role": "ADMIN",
+      "status": "ACTIVE",
+      "createdAt": "2026-08-30T14:24:26.698Z",
+      "lastLogin": "2026-09-01T14:24:26.698Z"
+    },
+    {
+      "id": "usr-port-1",
+      "name": "John Mrosso (TPA Port)",
+      "email": "port@galco.co.tz",
+      "username": "port_officer",
+      "role": "PORT_RELEASE",
+      "status": "ACTIVE",
+      "createdAt": "2026-08-30T14:24:26.698Z",
+      "lastLogin": "2026-09-01T14:24:26.698Z"
+    },
+    {
+      "id": "usr-galco-1",
+      "name": "Hamis Bakari (E27 Yard)",
+      "email": "yard@galco.co.tz",
+      "username": "galco_receiver",
+      "role": "GALCO_RECEIVING",
+      "status": "ACTIVE",
+      "createdAt": "2026-08-30T14:24:26.698Z",
+      "lastLogin": "2026-09-01T14:24:26.698Z"
+    }
+  ],
+  "userPasswords": {
+    "usr-admin-1": "admin123",
+    "usr-port-1": "port123",
+    "usr-galco-1": "yard123"
+  },
+  "vehicles": [],
+  "history": [],
+  "manifests": [],
+  "auditLogs": [],
+  "vessels": []
+}

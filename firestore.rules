@@ -61,7 +61,7 @@ service cloud.firestore {
     function isValidUser(data) {
       return data.id is string && data.id.size() <= 128 &&
              data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
-             data.email is string && data.email.size() > 0 && data.email.size() <= 150 &&
+             data.email is string && data.email.size() <= 150 &&
              data.username is string && data.username.size() > 0 && data.username.size() <= 50 &&
              data.role in ['ADMIN', 'PORT_RELEASE', 'GALCO_RECEIVING'] &&
              data.status in ['ACTIVE', 'INACTIVE', 'PENDING_APPROVAL'] &&
